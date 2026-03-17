@@ -1,0 +1,39 @@
+{
+  "seed": 7,
+  "device": "cpu",
+  "model": {
+    "input_dim": 32,
+    "hidden_dim": 64,
+    "output_dim": 6
+  },
+  "data": {
+    "num_train": 512,
+    "num_val": 256,
+    "teacher_rank": 4,
+    "teacher_delta_scale": 0.18,
+    "noise_std": 0.02
+  },
+  "lora": {
+    "enabled": true,
+    "target_modules": ["fc1", "fc2"],
+    "rank": 4,
+    "alpha": 8.0
+  },
+  "training": {
+    "num_steps": 250,
+    "batch_size": 64,
+    "learning_rate": 0.02,
+    "weight_decay": 0.0,
+    "log_interval": 25,
+    "eval_interval": 50
+  },
+  "quant_regularization": {
+    "enable_quant_lora_regularization": false,
+    "lambda_q": 0.0,
+    "quantizer_type": "uniform_per_tensor",
+    "bit_width": 4,
+    "group_size": 16,
+    "regularization_frequency": 1,
+    "log_per_layer_stats": false
+  }
+}

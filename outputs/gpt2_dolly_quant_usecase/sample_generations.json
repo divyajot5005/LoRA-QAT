@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "Instruction:\nDraft a polite reply to a customer asking for a refund because their package arrived damaged.\n\nResponse:\n",
+    "generation": "Instruction:\nDraft a polite reply to a customer asking for a refund because their package arrived damaged.\n\nResponse:\nRe:\nRe:"
+  },
+  {
+    "prompt": "Instruction:\nSummarize why regularization can help machine learning models generalize better.\n\nResponse:\n",
+    "generation": "Instruction:\nSummarize why regularization can help machine learning models generalize better.\n\nResponse:\nRegularization works by combining two sets of data. It can do this:\nData sets A and B are data sets A and B. A is a regular\ndata B is a regular data A is a regular data A is a regular data A is a regular data A is a regular data A is a regular data A is a regular data A is a regular data A is a regular data A"
+  },
+  {
+    "prompt": "Instruction:\nWrite a short internal helpdesk response explaining how to reset a forgotten password.\n\nResponse:\n",
+    "generation": "Instruction:\nWrite a short internal helpdesk response explaining how to reset a forgotten password.\n\nResponse:\nWrite a short internal helpdesk response explaining how to reset a forgotten password.\n\nAuthor:\n"
+  }
+]

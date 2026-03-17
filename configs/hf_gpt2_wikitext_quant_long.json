@@ -1,0 +1,48 @@
+{
+  "seed": 7,
+  "model": {
+    "task_type": "causal_lm",
+    "model_name": "gpt2",
+    "max_length": 128,
+    "gradient_checkpointing": true
+  },
+  "dataset": {
+    "dataset_name": "wikitext",
+    "dataset_config_name": "wikitext-2-raw-v1",
+    "train_split": "train[:20%]",
+    "eval_split": "validation[:20%]",
+    "text_column": "text",
+    "label_column": "label"
+  },
+  "lora": {
+    "enabled": true,
+    "target_modules": ["c_attn", "c_proj", "c_fc"],
+    "rank": 8,
+    "alpha": 16.0,
+    "dropout": 0.05
+  },
+  "training": {
+    "output_dir": "outputs/gpt2_wikitext_quant_long",
+    "device": "auto",
+    "use_fp16": true,
+    "num_steps": 120,
+    "batch_size": 2,
+    "eval_batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0,
+    "warmup_steps": 10,
+    "log_interval": 10,
+    "eval_interval": 30,
+    "max_eval_batches": null
+  },
+  "quant_regularization": {
+    "enable_quant_lora_regularization": true,
+    "lambda_q": 0.002,
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 64,
+    "regularization_frequency": 1,
+    "log_per_layer_stats": false
+  }
+}

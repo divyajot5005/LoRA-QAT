@@ -1,0 +1,23 @@
+{
+  "seed": 7,
+  "task_type": "causal_lm",
+  "model_name": "gpt2",
+  "dataset_name": "databricks/databricks-dolly-15k",
+  "dataset_config_name": null,
+  "train_split": "train[:30%]",
+  "eval_split": "train[90%:95%]",
+  "num_steps": 180,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 0.0001,
+  "enable_quant_lora_regularization": true,
+  "lambda_q": 0.002,
+  "quantizer_type": "uniform_groupwise",
+  "bit_width": 4,
+  "group_size": 64,
+  "peak_gpu_mem_mb": 2891.9306640625,
+  "final_metrics": {
+    "eval_loss": 2.850636852900187,
+    "eval_perplexity": 17.298795121118204
+  }
+}

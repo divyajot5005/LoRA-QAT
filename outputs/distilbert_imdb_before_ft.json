@@ -1,0 +1,8 @@
+{
+  "config": "configs/hf_distilbert_imdb_quant_usecase.json",
+  "lora_enabled": false,
+  "metrics": {
+    "eval_loss": 0.6992498573303223,
+    "eval_accuracy": 0.5044
+  }
+}

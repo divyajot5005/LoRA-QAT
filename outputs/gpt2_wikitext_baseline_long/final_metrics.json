@@ -1,0 +1,23 @@
+{
+  "seed": 7,
+  "task_type": "causal_lm",
+  "model_name": "gpt2",
+  "dataset_name": "wikitext",
+  "dataset_config_name": "wikitext-2-raw-v1",
+  "train_split": "train[:20%]",
+  "eval_split": "validation[:20%]",
+  "num_steps": 120,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 0.0001,
+  "enable_quant_lora_regularization": false,
+  "lambda_q": 0.0,
+  "quantizer_type": "uniform_groupwise",
+  "bit_width": 4,
+  "group_size": 64,
+  "peak_gpu_mem_mb": 1168.09765625,
+  "final_metrics": {
+    "eval_loss": 3.8178882681090256,
+    "eval_perplexity": 45.508006072203635
+  }
+}
