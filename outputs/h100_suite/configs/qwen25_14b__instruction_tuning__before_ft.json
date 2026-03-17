@@ -1,0 +1,73 @@
+{
+  "seed": 7,
+  "model": {
+    "task_type": "causal_lm",
+    "model_name": "Qwen/Qwen2.5-14B-Instruct",
+    "max_length": 384,
+    "gradient_checkpointing": true,
+    "torch_dtype": "bfloat16",
+    "attn_implementation": "sdpa"
+  },
+  "dataset": {
+    "dataset_name": "databricks/databricks-dolly-15k",
+    "dataset_config_name": null,
+    "train_split": "train[:70%]",
+    "eval_split": "train[90%:95%]",
+    "max_train_samples": 9000,
+    "max_eval_samples": 1000,
+    "format_style": "instruction_response",
+    "text_column": "instruction",
+    "label_column": "label",
+    "prompt_column": "instruction",
+    "response_column": "response",
+    "context_column": "context",
+    "mask_prompt_tokens": true
+  },
+  "lora": {
+    "enabled": true,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "rank": 16,
+    "alpha": 32.0,
+    "dropout": 0.05
+  },
+  "training": {
+    "output_dir": "outputs/h100_suite/runs/qwen25_14b__instruction_tuning__before_ft",
+    "device": "auto",
+    "mixed_precision": "bf16",
+    "num_steps": 250,
+    "batch_size": 1,
+    "eval_batch_size": 1,
+    "gradient_accumulation_steps": 16,
+    "learning_rate": 7.5e-05,
+    "weight_decay": 0.0,
+    "warmup_steps": 12,
+    "log_interval": 25,
+    "eval_interval": 50,
+    "max_eval_batches": null,
+    "generation_prompts": [
+      "Instruction:\nDraft a concise project-status update for a manager after a one-week delay.\n\nResponse:\n",
+      "Instruction:\nExplain the difference between precision and recall in machine learning.\n\nResponse:\n",
+      "Instruction:\nWrite a short, friendly email asking to reschedule a meeting.\n\nResponse:\n"
+    ],
+    "generation_max_new_tokens": 96,
+    "generation_temperature": 0.7,
+    "generation_top_p": 0.9
+  },
+  "quant_regularization": {
+    "enable_quant_lora_regularization": false,
+    "lambda_q": 0.0,
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 128,
+    "regularization_frequency": 1,
+    "log_per_layer_stats": false
+  }
+}
