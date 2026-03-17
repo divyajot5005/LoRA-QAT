@@ -1,9 +1,8 @@
 import math
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Iterable
 
 import torch
-from peft.tuners.lora.layer import LoraLayer
 
 from quant_lora.config import QuantRegularizationConfig
 from quant_lora.quantization import LayerQuantStats, quantize_merged_weight
@@ -14,27 +13,52 @@ class QuantRegularizationResult:
     raw_loss: torch.Tensor
     weighted_loss: torch.Tensor
     avg_distance_to_grid: float
+    num_regularized_layers: int = 0
     layer_stats: Dict[str, LayerQuantStats] = field(default_factory=dict)
 
+
+def _looks_like_lora_layer(module) -> bool:
+    return (
+        hasattr(module, "get_base_layer")
+        and hasattr(module, "get_delta_weight")
+        and hasattr(module, "lora_A")
+    )
+
+
+def _iter_adapter_names(module) -> Iterable[str]:
+    active_adapters = getattr(module, "active_adapters", None)
+    if isinstance(active_adapters, str):
+        yield active_adapters
+        return
+    if active_adapters:
+        for name in active_adapters:
+            yield name
+        return
+
+    lora_a = getattr(module, "lora_A", {})
+    if hasattr(lora_a, "keys"):
+        for name in lora_a.keys():
+            yield name
 
 
 def iter_peft_lora_weights(model):
     for module_name, module in model.named_modules():
-        if not isinstance(module, LoraLayer):
+        if not _looks_like_lora_layer(module):
             continue
         base_layer = module.get_base_layer()
         weight = getattr(base_layer, "weight", None)
         if weight is None or weight.ndim != 2:
             continue
 
-        active_adapters = getattr(module, "active_adapters", None)
-        if not active_adapters:
-            active_adapters = [name for name in module.lora_A.keys()]
         merged_weight = weight
-        for adapter_name in active_adapters:
-            if adapter_name not in module.lora_A:
+        found_adapter = False
+        for adapter_name in _iter_adapter_names(module):
+            if adapter_name not in getattr(module, "lora_A", {}):
                 continue
             merged_weight = merged_weight + module.get_delta_weight(adapter_name)
+            found_adapter = True
+        if not found_adapter:
+            continue
         yield module_name, merged_weight
 
 
@@ -44,9 +68,11 @@ def compute_quant_lora_regularization(model, config: QuantRegularizationConfig) 
     total_squared_error = torch.zeros((), device=device)
     total_abs_error = 0.0
     total_numel = 0
+    num_regularized_layers = 0
     layer_stats: Dict[str, LayerQuantStats] = {}
 
     for layer_name, merged_weight in iter_peft_lora_weights(model):
+        num_regularized_layers += 1
         merged_weight_fp32 = merged_weight.float()
         quantized_weight = quantize_merged_weight(
             merged_weight_fp32,
@@ -84,5 +110,6 @@ def compute_quant_lora_regularization(model, config: QuantRegularizationConfig) 
         raw_loss=raw_loss,
         weighted_loss=weighted_loss,
         avg_distance_to_grid=avg_distance_to_grid,
+        num_regularized_layers=num_regularized_layers,
         layer_stats=layer_stats,
     )

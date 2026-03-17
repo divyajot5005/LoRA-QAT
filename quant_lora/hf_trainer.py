@@ -225,6 +225,7 @@ def run_hf_training(config: HFExperimentConfig) -> None:
             raw_loss=torch.zeros((), device=device),
             weighted_loss=torch.zeros((), device=device),
             avg_distance_to_grid=0.0,
+            num_regularized_layers=0,
         )
 
         if autocast_dtype is not None and device.type == "cuda":
@@ -270,8 +271,10 @@ def run_hf_training(config: HFExperimentConfig) -> None:
             print(
                 f"step={update_step:04d} "
                 f"task_loss={task_loss.item():.6f} "
-                f"quant_reg_loss={quant_result.weighted_loss.item():.6f} "
-                f"avg_distance_to_grid={quant_result.avg_distance_to_grid:.6f} "
+                f"quant_reg_loss={quant_result.weighted_loss.item():.6e} "
+                f"quant_raw_loss={quant_result.raw_loss.item():.6e} "
+                f"avg_distance_to_grid={quant_result.avg_distance_to_grid:.6e} "
+                f"regularized_layers={quant_result.num_regularized_layers} "
                 f"{metric_str}"
                 f"{gpu_mem}"
                 f"{_format_layer_stats(quant_result.layer_stats)}"
