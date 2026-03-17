@@ -296,8 +296,10 @@ def _build_config(model: ModelSpec, task: TaskSpec, phase: str, output_root: Pat
 
 def _write_config(config: Dict[str, object], config_path: Path) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as handle:
+    temp_path = config_path.with_suffix(config_path.suffix + ".tmp")
+    with temp_path.open("w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
+    temp_path.replace(config_path)
 
 
 def _run_train(config_path: Path) -> None:
