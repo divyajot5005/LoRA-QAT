@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import torch
+from tqdm.auto import tqdm
 
 from quant_lora.hf_config import load_hf_experiment_config
 from quant_lora.hf_data import build_dataloaders
@@ -511,41 +512,43 @@ def main() -> None:
     selected_phases = args.phases
 
     selected_runs_for_serving: List[Dict[str, str]] = []
+    work_items = [(model, task, phase) for model in selected_models for task in selected_tasks for phase in selected_phases]
 
-    for model in selected_models:
-        for task in selected_tasks:
-            for phase in selected_phases:
-                if phase == "before_ft":
-                    phase_for_config = "no_quant_ft"
-                else:
-                    phase_for_config = phase
+    suite_bar = tqdm(work_items, desc="suite", dynamic_ncols=True)
+    for model, task, phase in suite_bar:
+        run_name = f"{model.family}__{task.name}__{phase}"
+        suite_bar.set_postfix(run=run_name)
+        if phase == "before_ft":
+            phase_for_config = "no_quant_ft"
+        else:
+            phase_for_config = phase
 
-                config = _build_config(model, task, phase_for_config, output_root)
-                run_name = f"{model.family}__{task.name}__{phase}"
-                config_path = configs_root / f"{run_name}.json"
-                config["training"]["output_dir"] = str(output_root / "runs" / run_name)
-                _write_config(config, config_path)
+        config = _build_config(model, task, phase_for_config, output_root)
+        config_path = configs_root / f"{run_name}.json"
+        config["training"]["output_dir"] = str(output_root / "runs" / run_name)
+        _write_config(config, config_path)
 
-                run_dir = Path(config["training"]["output_dir"])
-                metrics_path = run_dir / ("before_ft_metrics.json" if phase == "before_ft" else "final_metrics.json")
-                if metrics_path.exists():
-                    continue
-                if args.write_only:
-                    continue
+        run_dir = Path(config["training"]["output_dir"])
+        metrics_path = run_dir / ("before_ft_metrics.json" if phase == "before_ft" else "final_metrics.json")
+        if metrics_path.exists():
+            continue
+        if args.write_only:
+            continue
 
-                if phase == "before_ft":
-                    _run_before_ft_eval(config_path, metrics_path)
-                else:
-                    _run_train(config_path)
-                    if phase in {"quant_int4_ft", "quant_fp8_ft"}:
-                        selected_runs_for_serving.append(
-                            {
-                                "model_name": model.model_name,
-                                "adapter_dir": str(run_dir / "adapter"),
-                                "serve_name": run_name,
-                                "rank": str(model.rank),
-                            }
-                        )
+        if phase == "before_ft":
+            _run_before_ft_eval(config_path, metrics_path)
+        else:
+            _run_train(config_path)
+            if phase in {"quant_int4_ft", "quant_fp8_ft"}:
+                selected_runs_for_serving.append(
+                    {
+                        "model_name": model.model_name,
+                        "adapter_dir": str(run_dir / "adapter"),
+                        "serve_name": run_name,
+                        "rank": str(model.rank),
+                    }
+                )
+    suite_bar.close()
 
     rows = _collect_summary_rows(output_root)
     _write_summary(rows, output_root)

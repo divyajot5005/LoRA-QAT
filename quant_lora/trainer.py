@@ -4,6 +4,7 @@ from typing import Dict, Tuple
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 from quant_lora.config import ExperimentConfig
 from quant_lora.data import build_datasets
@@ -23,7 +24,7 @@ def _build_optimizer(model: nn.Module, learning_rate: float, weight_decay: float
     return torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=weight_decay)
 
 
-def _evaluate(model: nn.Module, dataloader: DataLoader, device: torch.device) -> Tuple[float, float]:
+def _evaluate(model: nn.Module, dataloader: DataLoader, device: torch.device, desc: str = "eval") -> Tuple[float, float]:
     criterion = nn.CrossEntropyLoss()
     model.eval()
     total_loss = 0.0
@@ -31,7 +32,7 @@ def _evaluate(model: nn.Module, dataloader: DataLoader, device: torch.device) ->
     total_correct = 0
 
     with torch.no_grad():
-        for inputs, targets in dataloader:
+        for inputs, targets in tqdm(dataloader, desc=desc, leave=False):
             inputs = inputs.to(device)
             targets = targets.to(device)
             logits = model(inputs)
@@ -83,6 +84,7 @@ def run_training(config: ExperimentConfig) -> None:
     print()
 
     step = 0
+    progress_bar = tqdm(total=config.training.num_steps, desc="train", dynamic_ncols=True)
     while step < config.training.num_steps:
         for batch_inputs, batch_targets in train_loader:
             if step >= config.training.num_steps:
@@ -112,6 +114,11 @@ def run_training(config: ExperimentConfig) -> None:
             if step % config.training.log_interval == 0:
                 predictions = logits.argmax(dim=-1)
                 accuracy = (predictions == batch_targets).float().mean().item()
+                progress_bar.set_postfix(
+                    task_loss=f"{task_loss.item():.4f}",
+                    quant_loss=f"{quant_result.weighted_loss.item():.2e}",
+                    train_acc=f"{accuracy:.4f}",
+                )
                 print(
                     f"step={step:04d} "
                     f"task_loss={task_loss.item():.6f} "
@@ -122,11 +129,13 @@ def run_training(config: ExperimentConfig) -> None:
                 )
 
             if (step + 1) % config.training.eval_interval == 0:
-                val_loss, val_accuracy = _evaluate(model, val_loader, device)
+                val_loss, val_accuracy = _evaluate(model, val_loader, device, desc=f"eval@{step + 1}")
                 print(f"eval step={step + 1:04d} val_loss={val_loss:.6f} val_acc={val_accuracy:.4f}")
 
             step += 1
+            progress_bar.update(1)
 
-    final_val_loss, final_val_accuracy = _evaluate(model, val_loader, device)
+    progress_bar.close()
+    final_val_loss, final_val_accuracy = _evaluate(model, val_loader, device, desc="final_eval")
     print()
     print(f"final val_loss={final_val_loss:.6f} final val_acc={final_val_accuracy:.4f}")

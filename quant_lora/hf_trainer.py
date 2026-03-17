@@ -8,6 +8,7 @@ from typing import Dict
 
 import torch
 from transformers import get_linear_schedule_with_warmup
+from tqdm.auto import tqdm
 
 from quant_lora.hf_config import HFExperimentConfig
 from quant_lora.hf_data import build_dataloaders
@@ -70,7 +71,7 @@ def _move_batch_to_device(batch, device: torch.device):
     return {key: value.to(device) for key, value in batch.items()}
 
 
-def _evaluate(model, dataloader, device: torch.device, config: HFExperimentConfig):
+def _evaluate(model, dataloader, device: torch.device, config: HFExperimentConfig, desc: str = "eval"):
     model.eval()
     total_loss = 0.0
     total_examples = 0
@@ -78,7 +79,7 @@ def _evaluate(model, dataloader, device: torch.device, config: HFExperimentConfi
     batches = 0
 
     with torch.no_grad():
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc=desc, leave=False, dynamic_ncols=True):
             if config.training.max_eval_batches is not None and batches >= config.training.max_eval_batches:
                 break
             batch = _move_batch_to_device(batch, device)
@@ -212,6 +213,7 @@ def run_hf_training(config: HFExperimentConfig) -> None:
     update_step = 0
     micro_step = 0
     train_iterator = iter(data_bundle.train_loader)
+    progress_bar = tqdm(total=config.training.num_steps, desc="train", dynamic_ncols=True)
 
     while update_step < config.training.num_steps:
         try:
@@ -264,6 +266,11 @@ def run_hf_training(config: HFExperimentConfig) -> None:
                 metric_str = f"train_acc={train_metric:.4f}"
             else:
                 metric_str = f"train_ppl={math.exp(min(task_loss.item(), 20.0)):.4f}"
+            progress_bar.set_postfix(
+                task_loss=f"{task_loss.item():.4f}",
+                quant_loss=f"{quant_result.weighted_loss.item():.2e}",
+                reg_layers=quant_result.num_regularized_layers,
+            )
 
             gpu_mem = ""
             if device.type == "cuda":
@@ -281,13 +288,15 @@ def run_hf_training(config: HFExperimentConfig) -> None:
             )
 
         if (update_step + 1) % config.training.eval_interval == 0:
-            metrics = _evaluate(model, data_bundle.eval_loader, device, config)
+            metrics = _evaluate(model, data_bundle.eval_loader, device, config, desc=f"eval@{update_step + 1}")
             metric_str = " ".join(f"{name}={value:.6f}" for name, value in metrics.items())
             print(f"eval step={update_step + 1:04d} {metric_str}")
 
         update_step += 1
+        progress_bar.update(1)
 
-    final_metrics = _evaluate(model, data_bundle.eval_loader, device, config)
+    progress_bar.close()
+    final_metrics = _evaluate(model, data_bundle.eval_loader, device, config, desc="final_eval")
     peak_gpu_mem_mb = torch.cuda.max_memory_allocated(device) / 1024**2 if device.type == "cuda" else 0.0
     _save_final_metrics(output_dir, config, final_metrics, peak_gpu_mem_mb)
     _save_model_artifacts(model, tokenizer, output_dir)
