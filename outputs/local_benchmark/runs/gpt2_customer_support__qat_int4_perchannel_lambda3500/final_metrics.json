@@ -1,0 +1,24 @@
+{
+  "seed": 7,
+  "task_type": "causal_lm",
+  "model_name": "gpt2",
+  "dataset_name": "bitext/Bitext-customer-support-llm-chatbot-training-dataset",
+  "dataset_config_name": null,
+  "train_split": "train[:20%]",
+  "eval_split": "train[90%:93%]",
+  "num_steps": 90,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 0.0001,
+  "mixed_precision": "fp16",
+  "enable_quant_lora_regularization": true,
+  "lambda_q": 3500.0,
+  "quantizer_type": "uniform_per_channel",
+  "bit_width": 4,
+  "group_size": 64,
+  "peak_gpu_mem_mb": 2789.72998046875,
+  "final_metrics": {
+    "eval_loss": 2.398207888118091,
+    "eval_perplexity": 11.003439306078798
+  }
+}

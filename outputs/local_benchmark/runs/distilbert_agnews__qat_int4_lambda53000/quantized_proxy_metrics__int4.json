@@ -1,0 +1,30 @@
+{
+  "config_path": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\configs\\distilbert_agnews__qat_int4_lambda53000.json",
+  "adapter_dir": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\runs\\distilbert_agnews__qat_int4_lambda53000\\adapter",
+  "task_type": "sequence_classification",
+  "model_name": "distilbert-base-uncased",
+  "dataset_name": "ag_news",
+  "dataset_config_name": null,
+  "quantized_proxy_target": {
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 64
+  },
+  "active_metrics": {
+    "eval_loss": 0.4112338451962722,
+    "eval_accuracy": 0.8697368421052631
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 0.4083375190433703,
+    "eval_accuracy": 0.8710526315789474
+  },
+  "primary_metric_name": "eval_accuracy",
+  "active_primary_metric": 0.8697368421052631,
+  "proxy_primary_metric": 0.8710526315789474,
+  "primary_metric_delta": 0.0013157894736842701,
+  "eval_loss_delta": -0.002896326152901918,
+  "raw_quant_error": 2.565864269854501e-05,
+  "avg_distance_to_grid": 0.004166184993529761,
+  "num_regularized_layers": 24,
+  "num_proxy_quantized_layers": 24
+}

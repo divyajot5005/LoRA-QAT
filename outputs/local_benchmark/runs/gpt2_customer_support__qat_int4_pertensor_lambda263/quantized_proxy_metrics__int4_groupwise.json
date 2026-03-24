@@ -1,0 +1,30 @@
+{
+  "config_path": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\configs\\gpt2_customer_support__qat_int4_pertensor_lambda263.json",
+  "adapter_dir": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\runs\\gpt2_customer_support__qat_int4_pertensor_lambda263\\adapter",
+  "task_type": "causal_lm",
+  "model_name": "gpt2",
+  "dataset_name": "bitext/Bitext-customer-support-llm-chatbot-training-dataset",
+  "dataset_config_name": null,
+  "quantized_proxy_target": {
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 64
+  },
+  "active_metrics": {
+    "eval_loss": 2.398200526130998,
+    "eval_perplexity": 11.003358299198837
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 2.6235544326583446,
+    "eval_perplexity": 13.784633160978077
+  },
+  "primary_metric_name": "eval_perplexity",
+  "active_primary_metric": 11.003358299198837,
+  "proxy_primary_metric": 13.784633160978077,
+  "primary_metric_delta": 2.7812748617792398,
+  "eval_loss_delta": 0.22535390652734666,
+  "raw_quant_error": 0.010051410645246506,
+  "avg_distance_to_grid": 0.07780063488049271,
+  "num_regularized_layers": 48,
+  "num_proxy_quantized_layers": 48
+}

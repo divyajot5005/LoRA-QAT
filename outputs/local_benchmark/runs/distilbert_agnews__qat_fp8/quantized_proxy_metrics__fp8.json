@@ -1,0 +1,30 @@
+{
+  "config_path": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\configs\\distilbert_agnews__qat_fp8.json",
+  "adapter_dir": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\runs\\distilbert_agnews__qat_fp8\\adapter",
+  "task_type": "sequence_classification",
+  "model_name": "distilbert-base-uncased",
+  "dataset_name": "ag_news",
+  "dataset_config_name": null,
+  "quantized_proxy_target": {
+    "quantizer_type": "fp8_e4m3fn",
+    "bit_width": 8,
+    "group_size": 64
+  },
+  "active_metrics": {
+    "eval_loss": 0.4108061605378201,
+    "eval_accuracy": 0.8710526315789474
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 0.4120344529026433,
+    "eval_accuracy": 0.8671052631578947
+  },
+  "primary_metric_name": "eval_accuracy",
+  "active_primary_metric": 0.8710526315789474,
+  "proxy_primary_metric": 0.8671052631578947,
+  "primary_metric_delta": -0.003947368421052699,
+  "eval_loss_delta": 0.0012282923648231914,
+  "raw_quant_error": 1.5311283050323254e-06,
+  "avg_distance_to_grid": 0.0008905098743357316,
+  "num_regularized_layers": 24,
+  "num_proxy_quantized_layers": 24
+}

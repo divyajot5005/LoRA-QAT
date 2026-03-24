@@ -1,0 +1,60 @@
+{
+  "seed": 7,
+  "model": {
+    "task_type": "sequence_classification",
+    "model_name": "distilbert-base-uncased",
+    "max_length": 128,
+    "gradient_checkpointing": false
+  },
+  "dataset": {
+    "dataset_name": "ag_news",
+    "dataset_config_name": null,
+    "train_split": "train[:5%]",
+    "eval_split": "test[:10%]",
+    "max_train_samples": null,
+    "max_eval_samples": null,
+    "format_style": "plain_text",
+    "text_column": "text",
+    "label_column": "label",
+    "prompt_column": null,
+    "response_column": null,
+    "context_column": null,
+    "mask_prompt_tokens": false
+  },
+  "lora": {
+    "enabled": true,
+    "target_modules": [
+      "q_lin",
+      "k_lin",
+      "v_lin",
+      "out_lin"
+    ],
+    "rank": 8,
+    "alpha": 16.0,
+    "dropout": 0.05
+  },
+  "training": {
+    "output_dir": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\local_benchmark\\runs\\distilbert_agnews__baseline",
+    "device": "auto",
+    "mixed_precision": "fp16",
+    "num_steps": 120,
+    "batch_size": 16,
+    "eval_batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 0.0002,
+    "warmup_steps": 12,
+    "log_interval": 20,
+    "eval_interval": 40,
+    "max_eval_batches": null,
+    "generation_prompts": []
+  },
+  "quant_regularization": {
+    "enable_quant_lora_regularization": false,
+    "lambda_q": 0.0,
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 64,
+    "regularization_frequency": 1,
+    "log_per_layer_stats": false
+  }
+}

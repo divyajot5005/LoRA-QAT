@@ -110,6 +110,10 @@ python run_h100_quant_lora_suite.py --output-root outputs/h100_suite
 
 The suite is set up for:
 
+- Gemma and Llama checkpoints:
+  - `google/gemma-3-1b-it`
+  - `meta-llama/Llama-3.2-1B-Instruct`
+  - `meta-llama/Llama-3.1-8B-Instruct`
 - 2 approximately 1B models:
   - `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
   - `Qwen/Qwen2.5-1.5B-Instruct`
@@ -148,6 +152,40 @@ python run_h100_quant_lora_suite.py --write-only
 python run_h100_quant_lora_suite.py --models qwen25_14b qwen25_coder_14b --tasks instruction_tuning
 python run_h100_quant_lora_suite.py --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
 python run_h100_quant_lora_suite.py --export-fp8-offline
+```
+
+Example focused run for larger public instruct models on a non-customer-support task:
+
+```bash
+python run_h100_quant_lora_suite.py \
+  --models gemma3_1b llama32_1b llama31_8b \
+  --tasks instruction_tuning \
+  --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
+```
+
+CloudExe example using a single H100:
+
+```bash
+cloudexe --gpuspec H100x1 -- \
+  /bin/bash /root/Quantization-through-LoRA/run_cloudexe_instruction_suite.sh
+```
+
+If your repo lives somewhere else on the remote machine, override `REPO_DIR` inline:
+
+```bash
+cloudexe --gpuspec H100x1 -- \
+  /bin/bash -lc 'REPO_DIR=/root/Protos-1B /bin/bash /root/Protos-1B/run_cloudexe_instruction_suite.sh'
+```
+
+If you prefer calling Python directly in the same style as your existing job:
+
+```bash
+cloudexe --gpuspec H100x1 -- \
+  /opt/miniconda/envs/ndna/bin/python /root/Quantization-through-LoRA/run_h100_quant_lora_suite.py \
+    --output-root /root/Quantization-through-LoRA/outputs/cloud_instruction_suite \
+    --models gemma3_1b llama32_1b llama31_8b \
+    --tasks instruction_tuning \
+    --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
 ```
 
 Outputs:

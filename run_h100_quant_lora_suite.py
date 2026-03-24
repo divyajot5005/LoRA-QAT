@@ -50,6 +50,30 @@ class TaskSpec:
 
 MODELS: List[ModelSpec] = [
     ModelSpec(
+        family="gemma3_1b",
+        model_name="google/gemma-3-1b-it",
+        size_bucket="1b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
+        family="llama32_1b",
+        model_name="meta-llama/Llama-3.2-1B-Instruct",
+        size_bucket="1b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
+        family="llama31_8b",
+        model_name="meta-llama/Llama-3.1-8B-Instruct",
+        size_bucket="7b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
         family="tinyllama_1b",
         model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
         size_bucket="1b",
