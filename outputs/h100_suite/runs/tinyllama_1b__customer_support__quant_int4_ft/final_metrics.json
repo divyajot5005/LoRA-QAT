@@ -1,0 +1,24 @@
+{
+  "seed": 7,
+  "task_type": "causal_lm",
+  "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "dataset_name": "bitext/Bitext-customer-support-llm-chatbot-training-dataset",
+  "dataset_config_name": null,
+  "train_split": "train[:35%]",
+  "eval_split": "train[90%:95%]",
+  "num_steps": 400,
+  "batch_size": 8,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 0.0002,
+  "mixed_precision": "bf16",
+  "enable_quant_lora_regularization": true,
+  "lambda_q": 1000000,
+  "quantizer_type": "uniform_groupwise",
+  "bit_width": 4,
+  "group_size": 128,
+  "peak_gpu_mem_mb": 29561.05126953125,
+  "final_metrics": {
+    "eval_loss": 1.070632853174245,
+    "eval_perplexity": 2.917225091080183
+  }
+}

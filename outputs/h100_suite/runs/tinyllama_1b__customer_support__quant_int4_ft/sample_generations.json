@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "Instruction:\nquestion about cancelling order 81342\n\nResponse:\n",
+    "generation": "Instruction:\nquestion about cancelling order 81342\n\nResponse:\n I'm on it! I'm here to assist you with canceling your order with the number {{Order Number}}. Please follow these steps:\n\n1. Log in to your {{Online Company Portal Info}} using your credentials.\n2. Navigate to the '{{Online Order Interaction}}' or '{{Online Order Interaction}}' section.\n3. Look for the order with the number {{Order Number}} and click on it"
+  },
+  {
+    "prompt": "Instruction:\nneed help tracking delayed package 55201\n\nResponse:\n",
+    "generation": "Instruction:\nneed help tracking delayed package 55201\n\nResponse:\n I'm on it! I understand your urgency in tracking the delayed package with the number {{Order Number}}. Let me assist you in finding the necessary information and providing you with the necessary guidance. Could you please provide me with some additional details such as the shipping address or any specific concerns you have regarding the package? This will help us to locate the package more efficiently and provide you with the most accurate and helpful information."
+  },
+  {
+    "prompt": "Instruction:\nrequesting refund because product arrived defective\n\nResponse:\n",
+    "generation": "Instruction:\nrequesting refund because product arrived defective\n\nResponse:\n I'm sorry to hear that you've received a defective product. Your satisfaction is our top priority, and we want to ensure that you receive a satisfactory resolution. To request a refund, please provide us with the specific details of the defect, such as the model number, color, or any other relevant information. Our team will review your request and assist you in resolving the issue. Thank you for bringing this matter to our attention, and we appreciate your"
+  }
+]

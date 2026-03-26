@@ -63,7 +63,7 @@
   },
   "quant_regularization": {
     "enable_quant_lora_regularization": true,
-    "lambda_q": 0.01,
+    "lambda_q": 1000000,
     "quantizer_type": "uniform_groupwise",
     "bit_width": 4,
     "group_size": 128,

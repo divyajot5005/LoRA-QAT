@@ -63,7 +63,7 @@
   },
   "quant_regularization": {
     "enable_quant_lora_regularization": true,
-    "lambda_q": 0.003,
+    "lambda_q": 1000000,
     "quantizer_type": "fp8_e4m3fn",
     "bit_width": 8,
     "group_size": 128,
