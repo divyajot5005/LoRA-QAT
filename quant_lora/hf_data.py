@@ -53,10 +53,12 @@ def build_dataloaders(config: HFExperimentConfig, tokenizer: PreTrainedTokenizer
 
 
 def _load_split(config: HFExperimentConfig, split: str):
+    cache_dir = os.environ.get("HF_DATASETS_CACHE")
     dataset = load_dataset(
         config.dataset.dataset_name,
         name=config.dataset.dataset_config_name,
         split=split,
+        cache_dir=cache_dir,
     )
     return dataset.shuffle(seed=config.seed)
 

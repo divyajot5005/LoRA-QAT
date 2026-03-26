@@ -188,6 +188,18 @@ cloudexe --gpuspec H100x1 -- \
     --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
 ```
 
+If the remote box has limited space under `/root/.cache`, point the Hugging Face cache at a larger mount:
+
+```bash
+cloudexe --gpuspec H100x1 -- \
+  /opt/miniconda/envs/ndna/bin/python /root/Quantization-through-LoRA/run_h100_quant_lora_suite.py \
+    --output-root /mnt/work/outputs/cloud_instruction_suite \
+    --cache-root /mnt/work/hf_cache \
+    --models gemma3_1b llama32_1b llama31_8b \
+    --tasks instruction_tuning \
+    --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
+```
+
 Outputs:
 
 - run configs: `outputs/h100_suite/configs/`

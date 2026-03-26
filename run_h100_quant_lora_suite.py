@@ -2,6 +2,7 @@ import argparse
 import csv
 import gc
 import json
+import os
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -15,6 +16,8 @@ from quant_lora.hf_config import load_hf_experiment_config
 from quant_lora.hf_data import build_dataloaders
 from quant_lora.hf_model import build_model, load_tokenizer
 from quant_lora.hf_trainer import _evaluate, _resolve_device, _set_seed
+
+REPO_ROOT = Path(__file__).resolve().parent
 
 
 @dataclass(frozen=True)
@@ -203,12 +206,28 @@ PHASES = ["before_ft", "no_quant_ft", "quant_int4_ft", "quant_fp8_ft"]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the H100 Quant-LoRA experiment suite.")
     parser.add_argument("--output-root", default="outputs/h100_suite", help="Root directory for configs and results.")
+    parser.add_argument("--cache-root", help="Optional root directory for Hugging Face model and dataset caches.")
     parser.add_argument("--models", nargs="*", help="Optional subset of model families to run.")
     parser.add_argument("--tasks", nargs="*", help="Optional subset of task names to run.")
     parser.add_argument("--phases", nargs="*", default=PHASES, help="Subset of phases to run.")
     parser.add_argument("--write-only", action="store_true", help="Only write configs/manifests, do not run experiments.")
     parser.add_argument("--export-fp8-offline", action="store_true", help="Try to export merged FP8 checkpoints with AutoFP8.")
     return parser.parse_args()
+
+
+def _configure_hf_cache(cache_root: Optional[str]) -> None:
+    if not cache_root:
+        return
+    cache_root_path = Path(cache_root).expanduser().resolve()
+    hub_cache = cache_root_path / "hub"
+    datasets_cache = cache_root_path / "datasets"
+    transformers_cache = cache_root_path / "transformers"
+    for path in (hub_cache, datasets_cache, transformers_cache):
+        path.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(cache_root_path)
+    os.environ["HF_HUB_CACHE"] = str(hub_cache)
+    os.environ["HF_DATASETS_CACHE"] = str(datasets_cache)
+    os.environ["TRANSFORMERS_CACHE"] = str(transformers_cache)
 
 
 def _size_defaults(size_bucket: str) -> Dict[str, object]:
@@ -328,7 +347,11 @@ def _write_config(config: Dict[str, object], config_path: Path) -> None:
 
 
 def _run_train(config_path: Path) -> None:
-    subprocess.run([sys.executable, "train_hf.py", "--config", str(config_path)], check=True)
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / "train_hf.py"), "--config", str(config_path)],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def _run_before_ft_eval(config_path: Path, output_path: Path) -> None:
@@ -527,6 +550,7 @@ def _maybe_export_fp8_offline(selected_runs: List[Dict[str, str]], output_root: 
 
 def main() -> None:
     args = parse_args()
+    _configure_hf_cache(args.cache_root)
     output_root = Path(args.output_root)
     configs_root = output_root / "configs"
     output_root.mkdir(parents=True, exist_ok=True)

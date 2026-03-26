@@ -5,8 +5,12 @@ from transformers import AutoModelForCausalLM, AutoModelForSequenceClassificatio
 from quant_lora.hf_config import HFExperimentConfig
 
 
+def _cache_dir() -> str | None:
+    return os.environ.get("TRANSFORMERS_CACHE") or os.environ.get("HF_HOME")
+
+
 def load_tokenizer(config: HFExperimentConfig):
-    tokenizer = AutoTokenizer.from_pretrained(config.model.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(config.model.model_name, cache_dir=_cache_dir())
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
@@ -38,10 +42,15 @@ def build_model(config: HFExperimentConfig, num_labels: int | None):
         model = AutoModelForSequenceClassification.from_pretrained(
             config.model.model_name,
             num_labels=num_labels,
+            cache_dir=_cache_dir(),
             **model_kwargs,
         )
     elif config.model.task_type == "causal_lm":
-        model = AutoModelForCausalLM.from_pretrained(config.model.model_name, **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(
+            config.model.model_name,
+            cache_dir=_cache_dir(),
+            **model_kwargs,
+        )
     else:
         raise ValueError(f"Unsupported task_type: {config.model.task_type}")
 
