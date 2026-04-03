@@ -7,13 +7,20 @@ from pathlib import Path
 from typing import Dict
 
 import torch
+from transformers import Adafactor
 from transformers import get_linear_schedule_with_warmup
 from tqdm.auto import tqdm
 
 from quant_lora.hf_config import HFExperimentConfig
 from quant_lora.hf_data import build_dataloaders
 from quant_lora.hf_model import build_model, load_tokenizer
-from quant_lora.peft_regularization import QuantRegularizationResult, compute_quant_lora_regularization
+from quant_lora.peft_regularization import (
+    QuantRegularizationResult,
+    capture_regularized_layer_inputs,
+    compute_logit_kl_loss,
+    compute_quant_lora_regularization,
+    temporarily_patch_regularized_forwards,
+)
 
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -43,11 +50,22 @@ def _resolve_autocast_dtype(mixed_precision: str):
     return mapping[mixed_precision]
 
 
-def _build_optimizer(model: torch.nn.Module, learning_rate: float, weight_decay: float):
+def _build_optimizer(model: torch.nn.Module, learning_rate: float, weight_decay: float, optimizer_type: str):
     parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
     if not parameters:
         raise ValueError("No trainable parameters were found for the Hugging Face run.")
-    return torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=weight_decay)
+    if optimizer_type == "adamw":
+        return torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=weight_decay)
+    if optimizer_type == "adafactor":
+        return Adafactor(
+            parameters,
+            lr=learning_rate,
+            scale_parameter=False,
+            relative_step=False,
+            warmup_init=False,
+            weight_decay=weight_decay,
+        )
+    raise ValueError(f"Unsupported optimizer_type: {optimizer_type}")
 
 
 def _format_layer_stats(layer_stats: Dict[str, object]) -> str:
@@ -123,6 +141,7 @@ def _save_final_metrics(output_dir: Path, config: HFExperimentConfig, metrics: D
         "quantizer_type": config.quant_regularization.quantizer_type,
         "bit_width": config.quant_regularization.bit_width,
         "group_size": config.quant_regularization.group_size,
+        "regularization_objective": config.quant_regularization.regularization_objective,
         "peak_gpu_mem_mb": peak_gpu_mem_mb,
         "final_metrics": metrics,
     }
@@ -130,11 +149,12 @@ def _save_final_metrics(output_dir: Path, config: HFExperimentConfig, metrics: D
         json.dump(payload, handle, indent=2)
 
 
-def _save_model_artifacts(model, tokenizer, output_dir: Path) -> None:
-    adapter_dir = output_dir / "adapter"
-    adapter_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(adapter_dir)
-    tokenizer.save_pretrained(adapter_dir)
+def _save_model_artifacts(model, tokenizer, output_dir: Path, config: HFExperimentConfig) -> Path:
+    artifact_dir = output_dir / ("adapter" if config.lora.enabled else "model")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(artifact_dir)
+    tokenizer.save_pretrained(artifact_dir)
+    return artifact_dir
 
 
 def _generate_and_save_samples(
@@ -184,7 +204,12 @@ def run_hf_training(config: HFExperimentConfig) -> None:
         model.config.pad_token_id = tokenizer.pad_token_id
 
     model = model.to(device)
-    optimizer = _build_optimizer(model, config.training.learning_rate, config.training.weight_decay)
+    optimizer = _build_optimizer(
+        model,
+        config.training.learning_rate,
+        config.training.weight_decay,
+        config.training.optimizer_type,
+    )
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=config.training.warmup_steps,
@@ -235,11 +260,54 @@ def run_hf_training(config: HFExperimentConfig) -> None:
         else:
             autocast_context = nullcontext()
 
-        with autocast_context:
-            outputs = model(**batch)
-            task_loss = outputs.loss
-            if _should_regularize(update_step, config):
-                quant_result = compute_quant_lora_regularization(model, config.quant_regularization)
+        should_regularize = _should_regularize(update_step, config)
+        objective = config.quant_regularization.regularization_objective
+        if should_regularize and objective == "activation_mse":
+            capture_context = capture_regularized_layer_inputs(
+                model,
+                detach=config.quant_regularization.detach_layer_inputs,
+            )
+        else:
+            capture_context = nullcontext({})
+
+        with capture_context as layer_inputs:
+            with autocast_context:
+                outputs = model(**batch)
+                task_loss = outputs.loss
+                if should_regularize and objective in {"weight_mse", "activation_mse"}:
+                    quant_result = compute_quant_lora_regularization(
+                        model,
+                        config.quant_regularization,
+                        layer_inputs=layer_inputs,
+                    )
+
+            if should_regularize and objective == "logit_kl":
+                weight_stats = compute_quant_lora_regularization(
+                        model,
+                        config.quant_regularization,
+                        objective_override="weight_mse",
+                    )
+                with torch.no_grad():
+                    with autocast_context:
+                        with temporarily_patch_regularized_forwards(model, config.quant_regularization, use_quantized=False):
+                            reference_outputs = model(**batch)
+                with autocast_context:
+                    with temporarily_patch_regularized_forwards(model, config.quant_regularization, use_quantized=True):
+                        proxy_outputs = model(**batch)
+                    raw_logit_kl = compute_logit_kl_loss(
+                        reference_outputs.logits,
+                        proxy_outputs.logits,
+                        batch.get("labels"),
+                        config.quant_regularization.logit_kl_temperature,
+                    )
+                quant_result = QuantRegularizationResult(
+                    raw_loss=raw_logit_kl,
+                    weighted_loss=config.quant_regularization.lambda_q * raw_logit_kl,
+                    avg_distance_to_grid=weight_stats.avg_distance_to_grid,
+                    num_regularized_layers=weight_stats.num_regularized_layers,
+                    layer_stats=weight_stats.layer_stats,
+                )
+
             total_loss = (task_loss + quant_result.weighted_loss) / accumulation_steps
 
         if use_scaler:
@@ -299,13 +367,13 @@ def run_hf_training(config: HFExperimentConfig) -> None:
     final_metrics = _evaluate(model, data_bundle.eval_loader, device, config, desc="final_eval")
     peak_gpu_mem_mb = torch.cuda.max_memory_allocated(device) / 1024**2 if device.type == "cuda" else 0.0
     _save_final_metrics(output_dir, config, final_metrics, peak_gpu_mem_mb)
-    _save_model_artifacts(model, tokenizer, output_dir)
+    artifact_dir = _save_model_artifacts(model, tokenizer, output_dir, config)
     _generate_and_save_samples(model, tokenizer, device, config, output_dir)
 
     metric_str = " ".join(f"{name}={value:.6f}" for name, value in final_metrics.items())
     print()
     print(f"final {metric_str}")
     print(f"saved_metrics={output_dir / 'final_metrics.json'}")
-    print(f"saved_adapter={output_dir / 'adapter'}")
+    print(f"saved_model_artifact={artifact_dir}")
     if config.model.task_type == "causal_lm" and config.training.generation_prompts:
         print(f"saved_generations={output_dir / 'sample_generations.json'}")

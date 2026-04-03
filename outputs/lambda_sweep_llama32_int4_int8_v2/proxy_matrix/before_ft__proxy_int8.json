@@ -1,0 +1,12 @@
+{
+  "active_metrics": {
+    "eval_loss": 2.045152661005656,
+    "eval_perplexity": 7.730338569095234
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 2.0466472829182942,
+    "eval_perplexity": 7.741901141197068
+  },
+  "eval_loss_delta": 0.001494621912638383,
+  "num_proxy_quantized_layers": 112
+}

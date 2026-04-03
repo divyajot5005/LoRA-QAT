@@ -1,0 +1,30 @@
+{
+  "config_path": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\fullft_smoke_config.json",
+  "artifact_dir": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\fullft_smoke\\model",
+  "task_type": "causal_lm",
+  "model_name": "C:\\Work\\Papers\\Quantization-through-LoRA\\outputs\\fullft_smoke\\model",
+  "dataset_name": "databricks/databricks-dolly-15k",
+  "dataset_config_name": null,
+  "quantized_proxy_target": {
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 16
+  },
+  "active_metrics": {
+    "eval_loss": 10.820836067199707,
+    "eval_perplexity": 50052.917121947525
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 10.820576667785645,
+    "eval_perplexity": 50039.93510841012
+  },
+  "primary_metric_name": "eval_perplexity",
+  "active_primary_metric": 50052.917121947525,
+  "proxy_primary_metric": 50039.93510841012,
+  "primary_metric_delta": -12.982013537402963,
+  "eval_loss_delta": -0.0002593994140625,
+  "raw_quant_error": 5.548386639020464e-07,
+  "avg_distance_to_grid": 0.00040211287526385655,
+  "num_regularized_layers": 9,
+  "num_proxy_quantized_layers": 9
+}

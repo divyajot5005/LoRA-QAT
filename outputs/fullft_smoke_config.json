@@ -1,0 +1,46 @@
+{
+  "seed": 7,
+  "model": {
+    "task_type": "causal_lm",
+    "model_name": "sshleifer/tiny-gpt2",
+    "max_length": 64,
+    "torch_dtype": "float32"
+  },
+  "dataset": {
+    "dataset_name": "databricks/databricks-dolly-15k",
+    "train_split": "train[:8]",
+    "eval_split": "train[8:12]",
+    "max_train_samples": 8,
+    "max_eval_samples": 4,
+    "format_style": "instruction_response",
+    "prompt_column": "instruction",
+    "response_column": "response",
+    "context_column": "context",
+    "mask_prompt_tokens": true
+  },
+  "lora": {
+    "enabled": false
+  },
+  "training": {
+    "output_dir": "outputs/fullft_smoke",
+    "device": "cpu",
+    "mixed_precision": "no",
+    "optimizer_type": "adamw",
+    "num_steps": 1,
+    "batch_size": 1,
+    "eval_batch_size": 1,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 0.0001,
+    "eval_interval": 1,
+    "log_interval": 1,
+    "max_eval_batches": 1
+  },
+  "quant_regularization": {
+    "enable_quant_lora_regularization": true,
+    "lambda_q": 1.0,
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 4,
+    "group_size": 16,
+    "regularization_objective": "weight_mse"
+  }
+}

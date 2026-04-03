@@ -1,0 +1,247 @@
+\documentclass[11pt]{article}
+\usepackage[review]{acl}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\title{Quantization-Aware Customization via Deployable-Weight Regularization}
+
+\author{
+  Anonymous Submission \\
+  CustomNLP4U Workshop Draft \\
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Model customization is usually optimized in floating point, while deployment often happens at reduced precision. This creates a train--deploy mismatch: the model optimized during finetuning is not the model used at inference time. We study a simple quantization-aware customization objective that regularizes deployable weights toward a target quantizer during training. In the LoRA setting, the regularizer is applied to the merged deployable weight space rather than only using post-training quantization after adaptation. We evaluate the downstream task loss of the merged-and-quantized model under INT8, INT4, 2-bit, and ternary targets. The main finding is conditional but clear. For INT8 and mild INT4 settings, deployable-weight regularization yields at most marginal improvements over a strong baseline of standard LoRA followed by post-training quantization. In contrast, under harsher 2-bit and ternary targets, the same regularization produces materially better post-quantization task loss. These results suggest that simple quantization-aware regularization is most useful when the deployment quantizer introduces substantial degradation, and is much less valuable when the quantization gap is already small.
+\end{abstract}
+
+\section{Introduction}
+
+Customization methods for language models are generally optimized and reported in full precision. In practice, however, deployment often happens under memory and latency constraints that require quantization. This means the final model used in production is a quantized version of the customized model, even though training optimizes the floating-point objective. The mismatch is especially visible in parameter-efficient finetuning settings such as LoRA \citep{hu2022lora}, where practitioners typically merge adapters into the base model and quantize the merged weights for serving.
+
+This raises a simple question: can we customize a model in a way that directly improves the quality of the quantized model we will actually deploy?
+
+We study a simple deployment-aware customization objective based on \emph{deployable-weight regularization}. During training, we add a penalty that encourages deployable weights to remain close to a target quantization grid. In the LoRA case, the regularizer is applied in merged weight space, i.e., after conceptually combining the low-rank update with the base weight. The method is lightweight, requires no redesign of the LoRA operator, and integrates with standard PEFT workflows.
+
+The main empirical result is that the usefulness of this simple objective depends strongly on the target quantizer. For INT8 and modest INT4 settings, gains over a strong baseline of LoRA followed by post-training quantization are extremely small. For harsher ultra-low-bit settings, however, the same regularization produces meaningful improvements in post-quantization task loss. This is a useful result for deployment-oriented customization: the value of quantization-aware training depends on how much deployment quality is actually at risk.
+
+\section{Related Work}
+
+Our work sits at the intersection of parameter-efficient finetuning, quantization-aware training, and low-bit deployment. LoRA \citep{hu2022lora} remains a standard approach for efficient customization of large language models. QLoRA \citep{dettmers2023qlora} showed that quantized base models can make finetuning more memory efficient, while quantization-aware LoRA variants such as QA-LoRA \citep{xu2024qalora} and initialization approaches such as LoftQ \citep{li2024loftq} address closer interactions between quantization and adaptation.
+
+Our goal is different from redesigning the adaptation operator itself. We instead ask whether a simple plug-in regularizer on deployable weights can improve the quality of the quantized model obtained after customization. This makes the method closer in spirit to deployment-aware quantization-aware training than to an alternative LoRA parameterization. The results also expose the limits of a naive weight-space surrogate: reducing weight-space distance to a quantization grid is not always enough to improve downstream task loss after quantization.
+
+\section{Method}
+
+\subsection{LoRA Customization}
+
+Let a pretrained weight matrix be $W_0$. In LoRA, the customized weight is
+\begin{equation}
+W = W_0 + \Delta W, \qquad \Delta W = BA,
+\end{equation}
+where $A$ and $B$ are trainable low-rank factors. In deployment, the adapter is merged into the base model and the merged weight is quantized.
+
+\subsection{Deployable-Weight Regularization}
+
+We add a regularization term that encourages the deployable weight to stay close to a target quantizer:
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\text{task}} + \lambda_q \cdot \mathcal{R}(W, Q(W)),
+\end{equation}
+where $Q(\cdot)$ denotes the target quantizer. In the main completed experiments, we use a simple weight-space mean squared error objective:
+\begin{equation}
+\mathcal{R}(W, Q(W)) = \lVert W - Q(W)\rVert_2^2.
+\end{equation}
+
+For LoRA, the regularizer is evaluated on LoRA-touched modules in merged deployable weight space. This keeps the recipe simple and compatible with existing PEFT stacks.
+
+\subsection{Evaluation Metric}
+
+The key metric is not the training-side regularization loss but the downstream task loss of the model after merge and quantization. For each run we report:
+\begin{enumerate}
+    \item floating-point task loss after customization,
+    \item post-quantization task loss after merging and proxy quantization,
+    \item the quantization gap
+    \begin{equation}
+    \Delta_{\text{quant}} = \mathcal{L}_{\text{quantized}} - \mathcal{L}_{\text{float}}.
+    \end{equation}
+\end{enumerate}
+
+This directly measures the quality of the model that would actually be deployed.
+
+\section{Experimental Setup}
+
+\subsection{Tasks and Models}
+
+Our main completed experiments use instruction tuning on \texttt{databricks-dolly-15k}. The core completed results in this draft come from LoRA runs on small instruction-tuned models, with the clearest quantitative comparisons available on Llama~3.2~1B. In addition, we completed a second-task LoRA slice on \texttt{code\_search\_net} (Python) for Qwen~0.6B, Llama~1B, Gemma~1B, Llama~3B, Qwen~4B, and Gemma~4B on a local A6000. We also completed 1B full-finetuning sweeps for Llama~1B and Qwen~0.6B, plus a substantial completed subset for Gemma~1B. These supporting experiments are used for robustness and scope analysis. We do not use them as the main deployment-quality evidence because post-quantization proxy evaluation for the full-finetuning branch is not complete.
+
+\subsection{Quantization Targets}
+
+We evaluate four deployment targets:
+\begin{itemize}
+    \item INT8,
+    \item INT4,
+    \item 2-bit,
+    \item ternary (approximately 1.58-bit effective precision).
+\end{itemize}
+
+The most informative behavior appears at the harsher 2-bit and ternary settings, where post-training quantization introduces substantially larger quality degradation.
+
+\subsection{Baselines}
+
+We compare:
+\begin{enumerate}
+    \item standard LoRA finetuning without quantization regularization,
+    \item post-training quantization of the merged LoRA model,
+    \item quantization-regularized LoRA under matched target quantizers.
+\end{enumerate}
+
+The main comparison is:
+\begin{quote}
+task loss after merging and quantizing the regularized model \\
+versus \\
+task loss after merging and quantizing the no-regularizer LoRA baseline.
+\end{quote}
+
+\section{Results}
+
+\subsection{INT8 and INT4: Only Marginal Gains}
+
+For moderate quantization settings, the method provides at best very small gains over LoRA followed by post-training quantization. On Llama~3.2~1B, the best completed INT4 result improves post-quantized loss from $1.98747$ to $1.98630$, and the best INT8 result improves post-quantized loss from $1.85160$ to $1.85132$. These gains are directionally positive but too small to support a strong general claim for easy quantization regimes.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Target & Method & Quantized Loss & $\Delta$ vs.\ Baseline \\
+\midrule
+INT4 & LoRA + PTQ & 1.98747 & 0.00000 \\
+INT4 & Best regularized & 1.98630 & -0.00117 \\
+INT8 & LoRA + PTQ & 1.85160 & 0.00000 \\
+INT8 & Best regularized & 1.85132 & -0.00028 \\
+\bottomrule
+\end{tabular}
+\caption{Best completed INT4 and INT8 results on Llama~3.2~1B. Gains exist but are extremely small.}
+\label{tab:int4-int8}
+\end{table}
+
+\subsection{2-bit and Ternary: Meaningful Improvements}
+
+The picture changes once the deployment target becomes harsh enough that post-training quantization causes substantial degradation. For Llama~3.2~1B under 2-bit proxy quantization, the no-regularizer LoRA baseline has post-quantization loss $14.27055$. Quantization-regularized runs improve this to $14.04537$, $13.41306$, and $12.14152$ as $\lambda_q$ increases from $10^5$ to $10^6$.
+
+Under ternary quantization, the no-regularizer baseline has post-quantization loss $10.68995$. Regularized runs improve this to $10.61170$, $10.59449$, $10.43695$, and $10.26500$ across the completed $\lambda_q$ sweep.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Setting & Quantized Loss & $\Delta$ vs.\ Baseline \\
+\midrule
+2-bit baseline & 14.27055 & 0.00000 \\
+2-bit, $\lambda_q=10^5$ & 14.04537 & -0.22518 \\
+2-bit, $\lambda_q=3 \times 10^5$ & 13.41306 & -0.85749 \\
+2-bit, $\lambda_q=10^6$ & 12.14152 & -2.12903 \\
+\midrule
+Ternary baseline & 10.68995 & 0.00000 \\
+Ternary, $\lambda_q=10^4$ & 10.61170 & -0.07825 \\
+Ternary, $\lambda_q=3 \times 10^4$ & 10.59449 & -0.09546 \\
+Ternary, $\lambda_q=10^5$ & 10.43695 & -0.25300 \\
+Ternary, $\lambda_q=3 \times 10^5$ & 10.26500 & -0.42495 \\
+\bottomrule
+\end{tabular}
+\caption{Ultra-low-bit results on Llama~3.2~1B. Unlike INT8 and mild INT4, the post-quantization gains here are meaningful.}
+\label{tab:lowbit}
+\end{table}
+
+\subsection{Trade-off Between Float and Quantized Quality}
+
+The strongest low-bit improvements do not always come for free. In some 2-bit settings, larger $\lambda_q$ improves post-quantized loss while degrading floating-point task loss. This means the correct optimization target depends on the actual deployment precision. If deployment happens at ultra-low precision, a small floating-point regression can be acceptable if the deployed quantized model improves materially.
+
+\subsection{Supporting Robustness Slice on a Second Task}
+
+We also completed a second-task LoRA slice on \texttt{code\_search\_net} to test whether the method destabilizes ordinary customization when moved away from instruction tuning. The main finding is that the completed runs preserve task quality almost exactly, and when there is a measurable improvement it is small. Across the completed 0.6B--4B runs, the best regularized model differs from the no-regularizer LoRA baseline by between $+9\times 10^{-6}$ and $-3.67\times 10^{-3}$ validation loss. In this slice, activation-aware regularization is usually as good as or slightly better than weight-space regularization.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Model & No-quant LoRA & Best regularized & $\Delta$ \\
+\midrule
+Llama 1B & 1.97799 & 1.97800 & +0.00001 \\
+Qwen 0.6B & 1.94287 & 1.94284 & -0.00003 \\
+Gemma 1B & 1.86194 & 1.85981 & -0.00212 \\
+Llama 3B & 1.82134 & 1.82130 & -0.00003 \\
+Qwen 4B & 1.62105 & 1.62103 & -0.00002 \\
+Gemma 4B & 1.54255 & 1.53888 & -0.00367 \\
+\bottomrule
+\end{tabular}
+\caption{Completed LoRA runs on \texttt{code\_search\_net}. The best completed regularized model is compared against the no-regularizer LoRA baseline. The slice mainly shows preservation of task quality; improvements are small.}
+\label{tab:code-robustness}
+\end{table}
+
+\subsection{Preliminary Full-Finetuning Extension}
+
+To test whether the idea is fundamentally broader than LoRA, we implemented the same regularizer for full finetuning and ran 1B-scale sweeps on \texttt{databricks-dolly-15k}. The completed portion of this extension suggests that the regularizer does not inherently damage floating-point finetuning quality. On Llama~1B, the best completed run improves validation loss from $1.46529$ to $1.46113$. On Qwen~0.6B, the best completed run improves from $1.81990$ to $1.81481$. On the completed subset of Gemma~1B runs, the best finished run improves from $1.69650$ to $1.67489$. These are not deployment-quality claims because the corresponding post-quantization proxy-eval branch is incomplete, but they do support the broader customization interpretation of the method.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Model & No-quant FT & Best completed reg. & Best target \\
+\midrule
+Llama 1B & 1.46529 & 1.46113 & 2-bit \\
+Qwen 0.6B & 1.81990 & 1.81481 & ternary \\
+Gemma 1B & 1.69650 & 1.67489 & INT8 \\
+\bottomrule
+\end{tabular}
+\caption{Completed portion of the 1B full-finetuning extension on Dolly. Values are floating-point validation loss.}
+\label{tab:fullft-extension}
+\end{table}
+
+\section{Analysis}
+
+The experiments expose an important limitation of simple weight-space regularization. In many runs, the raw quantization error and training-side quantization regularization loss decrease during training, but the downstream task loss after merge and quantization improves only slightly or not at all. In other words, reducing $\lVert W - Q(W)\rVert_2^2$ is not always well aligned with reducing deployed model loss.
+
+This mismatch is most visible in INT8 and mild INT4 regimes, where the baseline quantization gap is already small. When the quantized model is already close to the floating-point model, a weight-space surrogate appears too weak to buy much task-level improvement. In contrast, once the gap becomes large enough, as in 2-bit and ternary settings, even a simple regularizer can improve deployment quality.
+
+The supporting \texttt{code\_search\_net} slice is consistent with this reading. There, the regularizer mostly preserves floating-point quality, and activation-aware variants are slightly more stable than direct weight-space regularization on the larger 3B--4B models.
+
+This suggests a broader lesson: deployment-aware customization objectives should be judged by their effect on post-quantization task quality, not by raw weight-space error alone.
+
+\section{Broader Customization Perspective}
+
+Although the strongest completed evidence in this draft comes from LoRA, the underlying idea is broader. The same principle applies to full finetuning: optimize the task objective while regularizing the deployable model toward the target quantizer, and evaluate the actual post-quantization task loss of the final model. Our completed 1B-scale full-finetuning runs show that this broader formulation is technically viable and can preserve, or slightly improve, floating-point finetuning quality. The workshop claim in this draft nevertheless remains centered on the completed LoRA deployment results, because the post-quantization full-finetuning evaluation pipeline is not complete yet.
+
+\section{Limitations}
+
+This draft has several limitations. First, the completed results are single-seed. We are explicitly not making a multi-seed robustness claim in this submission. Second, the main deployment evidence still uses proxy quantization rather than every production deployment kernel. Third, some larger-model LoRA phases on the second-task slice failed under the single-GPU memory budget, especially direct INT4/FP8 weight-space regularization on 3B--4B models, so the supporting robustness table is not a fully dense matrix. Fourth, the broader 1B full-finetuning extension has completed only its floating-point branch; post-quantization proxy evaluation for that branch is not yet complete, so those runs are used only as scope analysis. Fifth, earlier Blackwell Kaggle attempts failed due to runtime CUDA compatibility issues and are not part of the reported results. Finally, the simple weight-space regularizer is not uniformly effective; its gains are concentrated in settings where the deployment quantizer is harsh enough to create substantial degradation.
+
+\section{Conclusion}
+
+We studied a simple deployment-aware customization objective that regularizes deployable weights toward a target quantizer during finetuning. The main conclusion is conditional but practically relevant: simple merged-weight regularization offers little advantage when the target quantizer already preserves task quality well, but becomes meaningfully more useful in harsher ultra-low-bit regimes such as 2-bit and ternary quantization.
+
+For customization workflows, this implies that the value of quantization-aware training depends strongly on the deployment target. If the final model will be aggressively quantized, evaluating only floating-point finetuned quality is not enough. Customization should be evaluated in the precision regime in which the model will actually be used.
+
+\section*{Acknowledgments}
+
+This draft is anonymized for workshop submission. The final version should add author information and acknowledgments. Any additional scale or robustness tables should be inserted only after they complete with usable metrics.
+
+\bibliography{custom}
+\bibliographystyle{acl_natbib}
+
+\end{document}

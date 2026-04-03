@@ -136,6 +136,8 @@ For each model-task pair, the script prepares and optionally runs:
 - `no_quant_ft`: LoRA finetuning without quantization regularization
 - `quant_int4_ft`: merged-weight regularized LoRA targeting INT4 deployability
 - `quant_fp8_ft`: merged-weight regularized LoRA targeting FP8 deployability
+- `quant_int4_act_ft`: activation-aware quantization regularization targeting INT4 deployability
+- `quant_fp8_act_ft`: activation-aware quantization regularization targeting FP8 deployability
 
 The H100 configs are optimized around:
 
@@ -160,7 +162,7 @@ Example focused run for larger public instruct models on a non-customer-support 
 python run_h100_quant_lora_suite.py \
   --models gemma3_1b llama32_1b llama31_8b \
   --tasks instruction_tuning \
-  --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
+  --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft quant_int4_act_ft quant_fp8_act_ft
 ```
 
 CloudExe example using a single H100:
@@ -168,6 +170,13 @@ CloudExe example using a single H100:
 ```bash
 cloudexe --gpuspec H100x1 -- \
   /bin/bash /root/Quantization-through-LoRA/run_cloudexe_instruction_suite.sh
+```
+
+To evaluate completed adapters under proxy INT4 / FP8 quantization:
+
+```bash
+cloudexe --gpuspec H100x1 -- \
+  /bin/bash /root/Quantization-through-LoRA/run_cloudexe_instruction_proxy_eval.sh
 ```
 
 If your repo lives somewhere else on the remote machine, override `REPO_DIR` inline:

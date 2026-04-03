@@ -48,6 +48,7 @@ class HFTrainingConfig:
     output_dir: str = "outputs"
     device: str = "auto"
     mixed_precision: str = "fp16"
+    optimizer_type: str = "adamw"
     num_steps: int = 40
     batch_size: int = 8
     eval_batch_size: int = 8

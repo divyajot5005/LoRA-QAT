@@ -1,0 +1,30 @@
+{
+  "config_path": "/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2/configs/llama32_1b__instruction_tuning__int8__lambda_1e07.json",
+  "adapter_dir": "/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2/runs/llama32_1b__instruction_tuning__int8__lambda_1e07/adapter",
+  "task_type": "causal_lm",
+  "model_name": "meta-llama/Llama-3.2-1B-Instruct",
+  "dataset_name": "databricks/databricks-dolly-15k",
+  "dataset_config_name": null,
+  "quantized_proxy_target": {
+    "quantizer_type": "uniform_groupwise",
+    "bit_width": 8,
+    "group_size": 128
+  },
+  "active_metrics": {
+    "eval_loss": 1.850880721728007,
+    "eval_perplexity": 6.365423221128896
+  },
+  "proxy_quantized_metrics": {
+    "eval_loss": 1.8513068106969197,
+    "eval_perplexity": 6.368136035655009
+  },
+  "primary_metric_name": "eval_perplexity",
+  "active_primary_metric": 6.365423221128896,
+  "proxy_primary_metric": 6.368136035655009,
+  "primary_metric_delta": 0.00271281452611305,
+  "eval_loss_delta": 0.00042608896891271897,
+  "raw_quant_error": 1.6858313856005225e-08,
+  "avg_distance_to_grid": 0.00010481347164684472,
+  "num_regularized_layers": 112,
+  "num_proxy_quantized_layers": 112
+}

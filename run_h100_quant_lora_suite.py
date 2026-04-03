@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -18,6 +19,25 @@ from quant_lora.hf_model import build_model, load_tokenizer
 from quant_lora.hf_trainer import _evaluate, _resolve_device, _set_seed
 
 REPO_ROOT = Path(__file__).resolve().parent
+
+
+def _resolve_hf_token() -> Optional[str]:
+    for env_name in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_HUB_TOKEN"):
+        value = os.environ.get(env_name)
+        if value:
+            return value.strip()
+
+    candidate_paths = [
+        Path(os.environ.get("HF_HOME", "")).expanduser() / "token" if os.environ.get("HF_HOME") else None,
+        Path.home() / ".cache" / "huggingface" / "token",
+        Path("/root/.cache/huggingface/token"),
+    ]
+    for candidate in candidate_paths:
+        if candidate and candidate.exists():
+            value = candidate.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+    return None
 
 
 @dataclass(frozen=True)
@@ -69,57 +89,57 @@ MODELS: List[ModelSpec] = [
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     ),
     ModelSpec(
+        family="qwen3_0p6b",
+        model_name="Qwen/Qwen3-0.6B",
+        size_bucket="1b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
+        family="llama32_3b",
+        model_name="meta-llama/Llama-3.2-3B-Instruct",
+        size_bucket="3b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
+        family="gemma3_4b",
+        model_name="google/gemma-3-4b-it",
+        size_bucket="4b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
+        family="qwen3_4b",
+        model_name="Qwen/Qwen3-4B",
+        size_bucket="4b",
+        rank=16,
+        alpha=32.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    ),
+    ModelSpec(
         family="llama31_8b",
         model_name="meta-llama/Llama-3.1-8B-Instruct",
-        size_bucket="7b",
+        size_bucket="8b",
         rank=16,
         alpha=32.0,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     ),
     ModelSpec(
-        family="tinyllama_1b",
-        model_name="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-        size_bucket="1b",
+        family="qwen3_8b",
+        model_name="Qwen/Qwen3-8B",
+        size_bucket="8b",
         rank=16,
         alpha=32.0,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     ),
     ModelSpec(
-        family="qwen25_15b",
-        model_name="Qwen/Qwen2.5-1.5B-Instruct",
-        size_bucket="1b",
-        rank=16,
-        alpha=32.0,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    ),
-    ModelSpec(
-        family="mistral_7b",
-        model_name="mistralai/Mistral-7B-Instruct-v0.3",
-        size_bucket="7b",
-        rank=16,
-        alpha=32.0,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    ),
-    ModelSpec(
-        family="qwen25_7b",
-        model_name="Qwen/Qwen2.5-7B-Instruct",
-        size_bucket="7b",
-        rank=16,
-        alpha=32.0,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    ),
-    ModelSpec(
-        family="qwen25_14b",
-        model_name="Qwen/Qwen2.5-14B-Instruct",
-        size_bucket="14b",
-        rank=16,
-        alpha=32.0,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    ),
-    ModelSpec(
-        family="qwen25_coder_14b",
-        model_name="Qwen/Qwen2.5-Coder-14B-Instruct",
-        size_bucket="14b",
+        family="gemma2_9b",
+        model_name="google/gemma-2-9b-it",
+        size_bucket="9b",
         rank=16,
         alpha=32.0,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
@@ -200,7 +220,16 @@ TASKS: List[TaskSpec] = [
 ]
 
 
-PHASES = ["before_ft", "no_quant_ft", "quant_int4_ft", "quant_fp8_ft"]
+PHASES = [
+    "before_ft",
+    "no_quant_ft",
+    "quant_int4_ft",
+    "quant_fp8_ft",
+    "quant_int2_ft",
+    "quant_ternary_ft",
+    "quant_int4_act_ft",
+    "quant_fp8_act_ft",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -217,29 +246,48 @@ def parse_args() -> argparse.Namespace:
 
 def _configure_hf_cache(cache_root: Optional[str]) -> None:
     if not cache_root:
-        return
-    cache_root_path = Path(cache_root).expanduser().resolve()
-    hub_cache = cache_root_path / "hub"
-    datasets_cache = cache_root_path / "datasets"
-    transformers_cache = cache_root_path / "transformers"
-    for path in (hub_cache, datasets_cache, transformers_cache):
-        path.mkdir(parents=True, exist_ok=True)
-    os.environ["HF_HOME"] = str(cache_root_path)
-    os.environ["HF_HUB_CACHE"] = str(hub_cache)
-    os.environ["HF_DATASETS_CACHE"] = str(datasets_cache)
-    os.environ["TRANSFORMERS_CACHE"] = str(transformers_cache)
+        cache_root_path = None
+    else:
+        cache_root_path = Path(cache_root).expanduser().resolve()
+        hub_cache = cache_root_path / "hub"
+        datasets_cache = cache_root_path / "datasets"
+        transformers_cache = cache_root_path / "transformers"
+        for path in (hub_cache, datasets_cache, transformers_cache):
+            path.mkdir(parents=True, exist_ok=True)
+        os.environ["HF_HOME"] = str(cache_root_path)
+        os.environ["HF_HUB_CACHE"] = str(hub_cache)
+        os.environ["HF_DATASETS_CACHE"] = str(datasets_cache)
+        os.environ["TRANSFORMERS_CACHE"] = str(transformers_cache)
+
+    token = _resolve_hf_token()
+    if token:
+        os.environ["HF_TOKEN"] = token
+        os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+        os.environ["HF_HUB_TOKEN"] = token
+        if cache_root_path is not None:
+            token_path = cache_root_path / "token"
+            token_path.write_text(token, encoding="utf-8")
 
 
-def _size_defaults(size_bucket: str) -> Dict[str, object]:
+def _size_defaults(model_family: str, size_bucket: str) -> Dict[str, object]:
+    if model_family == "llama31_8b":
+        return {"num_steps": 300, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 1e-4}
     defaults = {
-        "1b": {"num_steps": 400, "batch_size": 8, "eval_batch_size": 8, "grad_accum": 4, "lr": 2e-4},
-        "7b": {"num_steps": 300, "batch_size": 2, "eval_batch_size": 2, "grad_accum": 8, "lr": 1e-4},
-        "14b": {"num_steps": 250, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 7.5e-5},
+        "1b": {"num_steps": 400, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 2e-4},
+        "3b": {"num_steps": 350, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 1.5e-4},
+        "4b": {"num_steps": 320, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 1.25e-4},
+        "8b": {"num_steps": 280, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 1e-4},
+        "9b": {"num_steps": 250, "batch_size": 1, "eval_batch_size": 1, "grad_accum": 16, "lr": 8e-5},
     }
     return defaults[size_bucket]
 
 
 def _quant_payload(size_bucket: str, phase: str) -> Dict[str, object]:
+    activation_layers_by_size = {"1b": 8, "3b": 8, "4b": 6, "8b": 4, "9b": 4}
+    int4_reg_frequency = {"1b": 1, "3b": 8, "4b": 8, "8b": 8, "9b": 8}
+    fp8_reg_frequency = {"1b": 1, "3b": 4, "4b": 4, "8b": 4, "9b": 4}
+    int2_reg_frequency = {"1b": 1, "3b": 8, "4b": 8, "8b": 8, "9b": 8}
+    ternary_reg_frequency = {"1b": 1, "3b": 8, "4b": 8, "8b": 8, "9b": 8}
     if phase == "no_quant_ft":
         return {
             "enable_quant_lora_regularization": False,
@@ -247,31 +295,100 @@ def _quant_payload(size_bucket: str, phase: str) -> Dict[str, object]:
             "quantizer_type": "uniform_groupwise",
             "bit_width": 4,
             "group_size": 128,
+            "regularization_objective": "weight_mse",
             "regularization_frequency": 1,
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": 0,
             "log_per_layer_stats": False,
         }
 
     if phase == "quant_int4_ft":
-        lambda_by_size = {"1b": 0.01, "7b": 0.005, "14b": 0.003}
+        lambda_by_size = {"1b": 0.01, "3b": 0.008, "4b": 0.006, "8b": 0.004, "9b": 0.003}
         return {
             "enable_quant_lora_regularization": True,
             "lambda_q": lambda_by_size[size_bucket],
             "quantizer_type": "uniform_groupwise",
             "bit_width": 4,
             "group_size": 128,
-            "regularization_frequency": 1,
+            "regularization_objective": "weight_mse",
+            "regularization_frequency": int4_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": 0,
             "log_per_layer_stats": False,
         }
 
     if phase == "quant_fp8_ft":
-        lambda_by_size = {"1b": 0.003, "7b": 0.002, "14b": 0.001}
+        lambda_by_size = {"1b": 0.003, "3b": 0.0025, "4b": 0.002, "8b": 0.0015, "9b": 0.001}
         return {
             "enable_quant_lora_regularization": True,
             "lambda_q": lambda_by_size[size_bucket],
             "quantizer_type": "fp8_e4m3fn",
             "bit_width": 8,
             "group_size": 128,
-            "regularization_frequency": 1,
+            "regularization_objective": "weight_mse",
+            "regularization_frequency": fp8_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": 0,
+            "log_per_layer_stats": False,
+        }
+
+    if phase == "quant_int2_ft":
+        lambda_by_size = {"1b": 3e5, "3b": 1e5, "4b": 1e5, "8b": 3e4, "9b": 3e4}
+        return {
+            "enable_quant_lora_regularization": True,
+            "lambda_q": lambda_by_size[size_bucket],
+            "quantizer_type": "uniform_int2_groupwise",
+            "bit_width": 2,
+            "group_size": 128,
+            "regularization_objective": "weight_mse",
+            "regularization_frequency": int2_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": 0,
+            "log_per_layer_stats": False,
+        }
+
+    if phase == "quant_ternary_ft":
+        lambda_by_size = {"1b": 1e5, "3b": 3e4, "4b": 3e4, "8b": 1e4, "9b": 1e4}
+        return {
+            "enable_quant_lora_regularization": True,
+            "lambda_q": lambda_by_size[size_bucket],
+            "quantizer_type": "ternary_groupwise",
+            "bit_width": 2,
+            "group_size": 128,
+            "regularization_objective": "weight_mse",
+            "regularization_frequency": ternary_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": 0,
+            "log_per_layer_stats": False,
+        }
+
+    if phase == "quant_int4_act_ft":
+        lambda_by_size = {"1b": 0.01, "3b": 0.008, "4b": 0.006, "8b": 0.004, "9b": 0.003}
+        return {
+            "enable_quant_lora_regularization": True,
+            "lambda_q": lambda_by_size[size_bucket],
+            "quantizer_type": "uniform_groupwise",
+            "bit_width": 4,
+            "group_size": 128,
+            "regularization_objective": "activation_mse",
+            "regularization_frequency": int4_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": activation_layers_by_size[size_bucket],
+            "log_per_layer_stats": False,
+        }
+
+    if phase == "quant_fp8_act_ft":
+        lambda_by_size = {"1b": 0.003, "3b": 0.0025, "4b": 0.002, "8b": 0.0015, "9b": 0.001}
+        return {
+            "enable_quant_lora_regularization": True,
+            "lambda_q": lambda_by_size[size_bucket],
+            "quantizer_type": "fp8_e4m3fn",
+            "bit_width": 8,
+            "group_size": 128,
+            "regularization_objective": "activation_mse",
+            "regularization_frequency": fp8_reg_frequency[size_bucket],
+            "detach_layer_inputs": True,
+            "max_activation_regularized_layers": activation_layers_by_size[size_bucket],
             "log_per_layer_stats": False,
         }
 
@@ -279,7 +396,7 @@ def _quant_payload(size_bucket: str, phase: str) -> Dict[str, object]:
 
 
 def _build_config(model: ModelSpec, task: TaskSpec, phase: str, output_root: Path) -> Dict[str, object]:
-    defaults = _size_defaults(model.size_bucket)
+    defaults = _size_defaults(model.family, model.size_bucket)
     experiment_name = f"{model.family}__{task.name}__{phase}"
     output_dir = output_root / "runs" / experiment_name
 
@@ -351,6 +468,7 @@ def _run_train(config_path: Path) -> None:
         [sys.executable, str(REPO_ROOT / "train_hf.py"), "--config", str(config_path)],
         check=True,
         cwd=REPO_ROOT,
+        env=os.environ.copy(),
     )
 
 
@@ -560,6 +678,7 @@ def main() -> None:
     selected_phases = args.phases
 
     selected_runs_for_serving: List[Dict[str, str]] = []
+    failed_runs_path = output_root / "failed_runs.jsonl"
     work_items = [(model, task, phase) for model in selected_models for task in selected_tasks for phase in selected_phases]
 
     suite_bar = tqdm(work_items, desc="suite", dynamic_ncols=True)
@@ -583,19 +702,36 @@ def main() -> None:
         if args.write_only:
             continue
 
-        if phase == "before_ft":
-            _run_before_ft_eval(config_path, metrics_path)
-        else:
-            _run_train(config_path)
-            if phase in {"quant_int4_ft", "quant_fp8_ft"}:
-                selected_runs_for_serving.append(
-                    {
-                        "model_name": model.model_name,
-                        "adapter_dir": str(run_dir / "adapter"),
-                        "serve_name": run_name,
-                        "rank": str(model.rank),
-                    }
-                )
+        try:
+            if phase == "before_ft":
+                _run_before_ft_eval(config_path, metrics_path)
+            else:
+                _run_train(config_path)
+                if phase in {"quant_int4_ft", "quant_fp8_ft"}:
+                    selected_runs_for_serving.append(
+                        {
+                            "model_name": model.model_name,
+                            "adapter_dir": str(run_dir / "adapter"),
+                            "serve_name": run_name,
+                            "rank": str(model.rank),
+                        }
+                    )
+        except Exception as exc:
+            # Keep the queue moving: log this run and continue to the next work item.
+            failure_payload = {
+                "run_name": run_name,
+                "model_family": model.family,
+                "model_name": model.model_name,
+                "task": task.name,
+                "phase": phase,
+                "config_path": str(config_path),
+                "output_dir": str(run_dir),
+                "error": repr(exc),
+                "traceback": traceback.format_exc(),
+            }
+            with failed_runs_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(failure_payload) + "\n")
+            continue
     suite_bar.close()
 
     rows = _collect_summary_rows(output_root)

@@ -1,0 +1,65 @@
+set -euo pipefail
+cd /root/LoRA-QAT
+ROOT=/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2
+mkdir -p "$ROOT/configs" "$ROOT/runs"
+python - <<'PY'
+import base64, json, os, copy
+root = '/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2'
+config_dir = os.path.join(root, 'configs')
+os.makedirs(config_dir, exist_ok=True)
+int4_template = json.loads(base64.b64decode('ew0KICAic2VlZCI6IDcsDQogICJtb2RlbCI6IHsNCiAgICAidGFza190eXBlIjogImNhdXNhbF9sbSIsDQogICAgIm1vZGVsX25hbWUiOiAibWV0YS1sbGFtYS9MbGFtYS0zLjItMUItSW5zdHJ1Y3QiLA0KICAgICJtYXhfbGVuZ3RoIjogMzg0LA0KICAgICJncmFkaWVudF9jaGVja3BvaW50aW5nIjogdHJ1ZSwNCiAgICAidG9yY2hfZHR5cGUiOiAiYmZsb2F0MTYiLA0KICAgICJhdHRuX2ltcGxlbWVudGF0aW9uIjogInNkcGEiDQogIH0sDQogICJkYXRhc2V0Ijogew0KICAgICJkYXRhc2V0X25hbWUiOiAiZGF0YWJyaWNrcy9kYXRhYnJpY2tzLWRvbGx5LTE1ayIsDQogICAgImRhdGFzZXRfY29uZmlnX25hbWUiOiBudWxsLA0KICAgICJ0cmFpbl9zcGxpdCI6ICJ0cmFpbls6NzAlXSIsDQogICAgImV2YWxfc3BsaXQiOiAidHJhaW5bOTAlOjk1JV0iLA0KICAgICJtYXhfdHJhaW5fc2FtcGxlcyI6IDkwMDAsDQogICAgIm1heF9ldmFsX3NhbXBsZXMiOiAxMDAwLA0KICAgICJmb3JtYXRfc3R5bGUiOiAiaW5zdHJ1Y3Rpb25fcmVzcG9uc2UiLA0KICAgICJ0ZXh0X2NvbHVtbiI6ICJpbnN0cnVjdGlvbiIsDQogICAgImxhYmVsX2NvbHVtbiI6ICJsYWJlbCIsDQogICAgInByb21wdF9jb2x1bW4iOiAiaW5zdHJ1Y3Rpb24iLA0KICAgICJyZXNwb25zZV9jb2x1bW4iOiAicmVzcG9uc2UiLA0KICAgICJjb250ZXh0X2NvbHVtbiI6ICJjb250ZXh0IiwNCiAgICAibWFza19wcm9tcHRfdG9rZW5zIjogdHJ1ZQ0KICB9LA0KICAibG9yYSI6IHsNCiAgICAiZW5hYmxlZCI6IHRydWUsDQogICAgInRhcmdldF9tb2R1bGVzIjogWw0KICAgICAgInFfcHJvaiIsDQogICAgICAia19wcm9qIiwNCiAgICAgICJ2X3Byb2oiLA0KICAgICAgIm9fcHJvaiIsDQogICAgICAiZ2F0ZV9wcm9qIiwNCiAgICAgICJ1cF9wcm9qIiwNCiAgICAgICJkb3duX3Byb2oiDQogICAgXSwNCiAgICAicmFuayI6IDE2LA0KICAgICJhbHBoYSI6IDMyLjAsDQogICAgImRyb3BvdXQiOiAwLjA1DQogIH0sDQogICJ0cmFpbmluZyI6IHsNCiAgICAib3V0cHV0X2RpciI6ICJvdXRwdXRzXFxjbG91ZF9pbnN0cnVjdGlvbl9zdWl0ZVxccnVuc1xcbGxhbWEzMl8xYl9faW5zdHJ1Y3Rpb25fdHVuaW5nX19xdWFudF9pbnQ0X2Z0IiwNCiAgICAiZGV2aWNlIjogImF1dG8iLA0KICAgICJtaXhlZF9wcmVjaXNpb24iOiAiYmYxNiIsDQogICAgIm51bV9zdGVwcyI6IDQwMCwNCiAgICAiYmF0Y2hfc2l6ZSI6IDgsDQogICAgImV2YWxfYmF0Y2hfc2l6ZSI6IDgsDQogICAgImdyYWRpZW50X2FjY3VtdWxhdGlvbl9zdGVwcyI6IDQsDQogICAgImxlYXJuaW5nX3JhdGUiOiAwLjAwMDIsDQogICAgIndlaWdodF9kZWNheSI6IDAuMCwNCiAgICAid2FybXVwX3N0ZXBzIjogMjAsDQogICAgImxvZ19pbnRlcnZhbCI6IDQwLA0KICAgICJldmFsX2ludGVydmFsIjogODAsDQogICAgIm1heF9ldmFsX2JhdGNoZXMiOiBudWxsLA0KICAgICJnZW5lcmF0aW9uX3Byb21wdHMiOiBbDQogICAgICAiSW5zdHJ1Y3Rpb246XG5EcmFmdCBhIGNvbmNpc2UgcHJvamVjdC1zdGF0dXMgdXBkYXRlIGZvciBhIG1hbmFnZXIgYWZ0ZXIgYSBvbmUtd2VlayBkZWxheS5cblxuUmVzcG9uc2U6XG4iLA0KICAgICAgIkluc3RydWN0aW9uOlxuRXhwbGFpbiB0aGUgZGlmZmVyZW5jZSBiZXR3ZWVuIHByZWNpc2lvbiBhbmQgcmVjYWxsIGluIG1hY2hpbmUgbGVhcm5pbmcuXG5cblJlc3BvbnNlOlxuIiwNCiAgICAgICJJbnN0cnVjdGlvbjpcbldyaXRlIGEgc2hvcnQsIGZyaWVuZGx5IGVtYWlsIGFza2luZyB0byByZXNjaGVkdWxlIGEgbWVldGluZy5cblxuUmVzcG9uc2U6XG4iDQogICAgXSwNCiAgICAiZ2VuZXJhdGlvbl9tYXhfbmV3X3Rva2VucyI6IDk2LA0KICAgICJnZW5lcmF0aW9uX3RlbXBlcmF0dXJlIjogMC43LA0KICAgICJnZW5lcmF0aW9uX3RvcF9wIjogMC45DQogIH0sDQogICJxdWFudF9yZWd1bGFyaXphdGlvbiI6IHsNCiAgICAiZW5hYmxlX3F1YW50X2xvcmFfcmVndWxhcml6YXRpb24iOiB0cnVlLA0KICAgICJsYW1iZGFfcSI6IDAuMDEsDQogICAgInF1YW50aXplcl90eXBlIjogInVuaWZvcm1fZ3JvdXB3aXNlIiwNCiAgICAiYml0X3dpZHRoIjogNCwNCiAgICAiZ3JvdXBfc2l6ZSI6IDEyOCwNCiAgICAicmVndWxhcml6YXRpb25fZnJlcXVlbmN5IjogMSwNCiAgICAibG9nX3Blcl9sYXllcl9zdGF0cyI6IGZhbHNlDQogIH0NCn0=').decode('utf-8'))
+int8_template = json.loads(base64.b64decode('ew0KICAic2VlZCI6IDcsDQogICJtb2RlbCI6IHsNCiAgICAidGFza190eXBlIjogImNhdXNhbF9sbSIsDQogICAgIm1vZGVsX25hbWUiOiAibWV0YS1sbGFtYS9MbGFtYS0zLjItMUItSW5zdHJ1Y3QiLA0KICAgICJtYXhfbGVuZ3RoIjogMzg0LA0KICAgICJncmFkaWVudF9jaGVja3BvaW50aW5nIjogdHJ1ZSwNCiAgICAidG9yY2hfZHR5cGUiOiAiYmZsb2F0MTYiLA0KICAgICJhdHRuX2ltcGxlbWVudGF0aW9uIjogInNkcGEiDQogIH0sDQogICJkYXRhc2V0Ijogew0KICAgICJkYXRhc2V0X25hbWUiOiAiZGF0YWJyaWNrcy9kYXRhYnJpY2tzLWRvbGx5LTE1ayIsDQogICAgImRhdGFzZXRfY29uZmlnX25hbWUiOiBudWxsLA0KICAgICJ0cmFpbl9zcGxpdCI6ICJ0cmFpbls6NzAlXSIsDQogICAgImV2YWxfc3BsaXQiOiAidHJhaW5bOTAlOjk1JV0iLA0KICAgICJtYXhfdHJhaW5fc2FtcGxlcyI6IDkwMDAsDQogICAgIm1heF9ldmFsX3NhbXBsZXMiOiAxMDAwLA0KICAgICJmb3JtYXRfc3R5bGUiOiAiaW5zdHJ1Y3Rpb25fcmVzcG9uc2UiLA0KICAgICJ0ZXh0X2NvbHVtbiI6ICJpbnN0cnVjdGlvbiIsDQogICAgImxhYmVsX2NvbHVtbiI6ICJsYWJlbCIsDQogICAgInByb21wdF9jb2x1bW4iOiAiaW5zdHJ1Y3Rpb24iLA0KICAgICJyZXNwb25zZV9jb2x1bW4iOiAicmVzcG9uc2UiLA0KICAgICJjb250ZXh0X2NvbHVtbiI6ICJjb250ZXh0IiwNCiAgICAibWFza19wcm9tcHRfdG9rZW5zIjogdHJ1ZQ0KICB9LA0KICAibG9yYSI6IHsNCiAgICAiZW5hYmxlZCI6IHRydWUsDQogICAgInRhcmdldF9tb2R1bGVzIjogWw0KICAgICAgInFfcHJvaiIsDQogICAgICAia19wcm9qIiwNCiAgICAgICJ2X3Byb2oiLA0KICAgICAgIm9fcHJvaiIsDQogICAgICAiZ2F0ZV9wcm9qIiwNCiAgICAgICJ1cF9wcm9qIiwNCiAgICAgICJkb3duX3Byb2oiDQogICAgXSwNCiAgICAicmFuayI6IDE2LA0KICAgICJhbHBoYSI6IDMyLjAsDQogICAgImRyb3BvdXQiOiAwLjA1DQogIH0sDQogICJ0cmFpbmluZyI6IHsNCiAgICAib3V0cHV0X2RpciI6ICJvdXRwdXRzXFxjbG91ZF9pbnN0cnVjdGlvbl9zdWl0ZVxccnVuc1xcbGxhbWEzMl8xYl9faW5zdHJ1Y3Rpb25fdHVuaW5nX19xdWFudF9mcDhfZnQiLA0KICAgICJkZXZpY2UiOiAiYXV0byIsDQogICAgIm1peGVkX3ByZWNpc2lvbiI6ICJiZjE2IiwNCiAgICAibnVtX3N0ZXBzIjogNDAwLA0KICAgICJiYXRjaF9zaXplIjogOCwNCiAgICAiZXZhbF9iYXRjaF9zaXplIjogOCwNCiAgICAiZ3JhZGllbnRfYWNjdW11bGF0aW9uX3N0ZXBzIjogNCwNCiAgICAibGVhcm5pbmdfcmF0ZSI6IDAuMDAwMiwNCiAgICAid2VpZ2h0X2RlY2F5IjogMC4wLA0KICAgICJ3YXJtdXBfc3RlcHMiOiAyMCwNCiAgICAibG9nX2ludGVydmFsIjogNDAsDQogICAgImV2YWxfaW50ZXJ2YWwiOiA4MCwNCiAgICAibWF4X2V2YWxfYmF0Y2hlcyI6IG51bGwsDQogICAgImdlbmVyYXRpb25fcHJvbXB0cyI6IFsNCiAgICAgICJJbnN0cnVjdGlvbjpcbkRyYWZ0IGEgY29uY2lzZSBwcm9qZWN0LXN0YXR1cyB1cGRhdGUgZm9yIGEgbWFuYWdlciBhZnRlciBhIG9uZS13ZWVrIGRlbGF5LlxuXG5SZXNwb25zZTpcbiIsDQogICAgICAiSW5zdHJ1Y3Rpb246XG5FeHBsYWluIHRoZSBkaWZmZXJlbmNlIGJldHdlZW4gcHJlY2lzaW9uIGFuZCByZWNhbGwgaW4gbWFjaGluZSBsZWFybmluZy5cblxuUmVzcG9uc2U6XG4iLA0KICAgICAgIkluc3RydWN0aW9uOlxuV3JpdGUgYSBzaG9ydCwgZnJpZW5kbHkgZW1haWwgYXNraW5nIHRvIHJlc2NoZWR1bGUgYSBtZWV0aW5nLlxuXG5SZXNwb25zZTpcbiINCiAgICBdLA0KICAgICJnZW5lcmF0aW9uX21heF9uZXdfdG9rZW5zIjogOTYsDQogICAgImdlbmVyYXRpb25fdGVtcGVyYXR1cmUiOiAwLjcsDQogICAgImdlbmVyYXRpb25fdG9wX3AiOiAwLjkNCiAgfSwNCiAgInF1YW50X3JlZ3VsYXJpemF0aW9uIjogew0KICAgICJlbmFibGVfcXVhbnRfbG9yYV9yZWd1bGFyaXphdGlvbiI6IHRydWUsDQogICAgImxhbWJkYV9xIjogMC4wMDMsDQogICAgInF1YW50aXplcl90eXBlIjogImZwOF9lNG0zZm4iLA0KICAgICJiaXRfd2lkdGgiOiA4LA0KICAgICJncm91cF9zaXplIjogMTI4LA0KICAgICJyZWd1bGFyaXphdGlvbl9mcmVxdWVuY3kiOiAxLA0KICAgICJsb2dfcGVyX2xheWVyX3N0YXRzIjogZmFsc2UNCiAgfQ0KfQ==').decode('utf-8'))
+for tpl in (int4_template, int8_template):
+    tpl['quant_regularization']['regularization_objective'] = 'weight_mse'
+    tpl['quant_regularization']['regularization_frequency'] = 1
+    tpl['quant_regularization']['detach_layer_inputs'] = True
+    tpl['quant_regularization']['max_activation_regularized_layers'] = 0
+    tpl['quant_regularization']['log_per_layer_stats'] = False
+lambdas = [1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12]
+variants = [
+    ('int4', int4_template, 'uniform_groupwise', 4),
+    ('int8', int8_template, 'uniform_groupwise', 8),
+]
+for label, tpl, qtype, bit_width in variants:
+    for lam in lambdas:
+        cfg = copy.deepcopy(tpl)
+        lam_tag = format(lam, '.0e').replace('+', '')
+        run_name = f'llama32_1b__instruction_tuning__{label}__lambda_{lam_tag}'
+        cfg['training']['output_dir'] = os.path.join(root, 'runs', run_name)
+        cfg['quant_regularization']['enable_quant_lora_regularization'] = True
+        cfg['quant_regularization']['lambda_q'] = lam
+        cfg['quant_regularization']['quantizer_type'] = qtype
+        cfg['quant_regularization']['bit_width'] = bit_width
+        cfg['quant_regularization']['group_size'] = 128
+        with open(os.path.join(config_dir, run_name + '.json'), 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+print('WROTE_CONFIGS', len(lambdas) * len(variants))
+PY
+cat > "$ROOT/run_batch.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cd /root/LoRA-QAT
+ROOT=/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2
+for cfg in "$ROOT"/configs/*.json; do
+  run_name=$(basename "$cfg" .json)
+  out_dir="$ROOT/runs/$run_name"
+  mkdir -p "$out_dir"
+  if [ -f "$out_dir/final_metrics.json" ]; then
+    echo "SKIP $(date -Is) $run_name already_done"
+    continue
+  fi
+  echo "START $(date -Is) $run_name"
+  /opt/miniconda/envs/ndna/bin/python /root/LoRA-QAT/train_hf.py --config "$cfg" 2>&1 | tee "$out_dir/train.log"
+  status=${PIPESTATUS[0]}
+  echo "END $(date -Is) $run_name status=$status"
+  if [ "$status" -ne 0 ]; then
+    exit "$status"
+  fi
+done
+SH
+chmod +x "$ROOT/run_batch.sh"
+pkill -f '/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2/run_batch.sh' || true
+nohup bash "$ROOT/run_batch.sh" > "$ROOT/sweep.log" 2>&1 &
+sleep 2
+pgrep -af '/mnt/loraqat_outputs/lambda_sweep_llama32_int4_int8_v2/run_batch.sh' || true
+tail -n 20 "$ROOT/sweep.log" || true

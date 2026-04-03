@@ -45,7 +45,11 @@ class QuantRegularizationConfig:
     quantizer_type: str = "uniform_per_tensor"
     bit_width: int = 4
     group_size: int = 16
+    regularization_objective: str = "weight_mse"
+    logit_kl_temperature: float = 1.0
     regularization_frequency: int = 1
+    detach_layer_inputs: bool = True
+    max_activation_regularized_layers: int = 0
     log_per_layer_stats: bool = False
 
 

@@ -1,0 +1,25 @@
+{
+  "seed": 7,
+  "task_type": "causal_lm",
+  "model_name": "sshleifer/tiny-gpt2",
+  "dataset_name": "databricks/databricks-dolly-15k",
+  "dataset_config_name": null,
+  "train_split": "train[:8]",
+  "eval_split": "train[8:12]",
+  "num_steps": 1,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 1,
+  "learning_rate": 0.0001,
+  "mixed_precision": "no",
+  "enable_quant_lora_regularization": true,
+  "lambda_q": 1.0,
+  "quantizer_type": "uniform_groupwise",
+  "bit_width": 4,
+  "group_size": 16,
+  "regularization_objective": "weight_mse",
+  "peak_gpu_mem_mb": 0.0,
+  "final_metrics": {
+    "eval_loss": 10.820836067199707,
+    "eval_perplexity": 50052.917121947525
+  }
+}

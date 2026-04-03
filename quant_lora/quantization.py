@@ -43,6 +43,70 @@ def _quantize_groupwise(weights: torch.Tensor, bit_width: int, group_size: int) 
     return quantized[:, :in_features]
 
 
+def _quantize_int2_midrise_groupwise(weights: torch.Tensor, group_size: int) -> torch.Tensor:
+    if group_size <= 0:
+        raise ValueError("group_size must be positive for uniform_int2_groupwise quantization.")
+
+    out_features, in_features = weights.shape
+    remainder = in_features % group_size
+    pad_size = (group_size - remainder) % group_size
+    if pad_size > 0:
+        padded_weights = torch.nn.functional.pad(weights, (0, pad_size))
+    else:
+        padded_weights = weights
+
+    num_groups = padded_weights.size(1) // group_size
+    grouped = padded_weights.view(out_features, num_groups, group_size)
+    max_abs = grouped.abs().amax(dim=-1, keepdim=True)
+    scale = max_abs / 1.5
+    safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
+    normalized = grouped / safe_scale
+    levels = torch.empty_like(normalized)
+    levels = torch.where(normalized < -1.0, torch.full_like(levels, -1.5), levels)
+    levels = torch.where((normalized >= -1.0) & (normalized < 0.0), torch.full_like(levels, -0.5), levels)
+    levels = torch.where((normalized >= 0.0) & (normalized < 1.0), torch.full_like(levels, 0.5), levels)
+    levels = torch.where(normalized >= 1.0, torch.full_like(levels, 1.5), levels)
+    quantized = torch.where(scale > 0, levels * safe_scale, torch.zeros_like(grouped)).view(out_features, -1)
+    return quantized[:, :in_features]
+
+
+def _ternary_quantize(grouped: torch.Tensor, threshold: torch.Tensor) -> torch.Tensor:
+    positive = grouped > threshold
+    negative = grouped < -threshold
+    selected = positive | negative
+    selected_sum = (grouped.abs() * selected).sum(dim=-1, keepdim=True)
+    selected_count = selected.sum(dim=-1, keepdim=True)
+    scale = torch.where(
+        selected_count > 0,
+        selected_sum / selected_count.clamp_min(1),
+        torch.zeros_like(selected_sum),
+    )
+    return torch.where(
+        positive,
+        scale,
+        torch.where(negative, -scale, torch.zeros_like(grouped)),
+    )
+
+
+def _quantize_ternary_groupwise(weights: torch.Tensor, group_size: int) -> torch.Tensor:
+    if group_size <= 0:
+        raise ValueError("group_size must be positive for ternary_groupwise quantization.")
+
+    out_features, in_features = weights.shape
+    remainder = in_features % group_size
+    pad_size = (group_size - remainder) % group_size
+    if pad_size > 0:
+        padded_weights = torch.nn.functional.pad(weights, (0, pad_size))
+    else:
+        padded_weights = weights
+
+    num_groups = padded_weights.size(1) // group_size
+    grouped = padded_weights.view(out_features, num_groups, group_size)
+    threshold = 0.7 * grouped.abs().mean(dim=-1, keepdim=True)
+    quantized = _ternary_quantize(grouped, threshold).view(out_features, -1)
+    return quantized[:, :in_features]
+
+
 def _quantize_fp8(weights: torch.Tensor, quantizer_type: str) -> torch.Tensor:
     if quantizer_type == "fp8_e4m3fn":
         dtype = torch.float8_e4m3fn
@@ -64,6 +128,11 @@ def quantize_merged_weight(
 ) -> torch.Tensor:
     if quantizer_type in {"fp8_e4m3fn", "fp8_e5m2"}:
         return _quantize_fp8(weights, quantizer_type)
+
+    if quantizer_type == "uniform_int2_groupwise":
+        return _quantize_int2_midrise_groupwise(weights, group_size)
+    if quantizer_type == "ternary_groupwise":
+        return _quantize_ternary_groupwise(weights, group_size)
 
     if bit_width < 2:
         raise ValueError("bit_width must be at least 2.")
