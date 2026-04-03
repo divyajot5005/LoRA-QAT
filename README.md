@@ -1,286 +1,219 @@
-# Quantization-Aware LoRA Prototype
+# Quantization-through-LoRA
 
-This repository contains a minimal research prototype for quantization-aware PEFT with LoRA.
+This repository studies a simple question:
 
-## Method
+How do we finetune a model so that the **quantized model we actually deploy** is better, not just the floating-point model we train?
 
-For each LoRA-adapted layer, let:
+The project started with LoRA and later added a 1B full-finetuning extension. The core idea is to regularize deployable weights toward a target quantizer during training, then evaluate the model **after merge and proxy quantization**.
 
-- `M` be the frozen base weight
-- `M' = B @ A` be the LoRA update
-- `W = M + M'` be the merged deployable weight
+## What The Project Actually Shows
 
-The training loss is:
+The main completed result is not “quantization-aware training always helps.”
 
-`L = L_task + lambda_q * dist(W, Q(W))`
+The stronger and more defensible result is:
 
-In this prototype:
+- for `INT8` and mild `INT4`, gains over ordinary finetuning followed by post-training quantization are usually tiny
+- for harsher targets such as `2-bit` and ternary, the same idea can produce meaningful post-quantization improvements
 
-- `Q(W)` is a uniform symmetric fake quantizer
-- `dist` is mean squared error between `W` and `Q(W)`
-- the regularizer is applied only to LoRA-touched weights
-- the feature is fully optional and off by default
-- there is no second task forward pass, Hessian, or Fisher term
+Representative completed wins:
 
-## Project Layout
+- `Llama 3.2 1B` LoRA, `2-bit`:
+  - baseline merged-then-quantized loss: `14.27055`
+  - best regularized run: `12.14152`
+  - improvement: `-2.12903`
 
-- `train.py`: synthetic sanity-check trainer
-- `train_hf.py`: Hugging Face trainer for real pretrained models
-- `quant_lora/config.py`: synthetic config dataclasses and JSON loader
-- `quant_lora/hf_config.py`: Hugging Face config dataclasses and JSON loader
-- `quant_lora/data.py`: synthetic teacher-student classification task
-- `quant_lora/hf_data.py`: Hugging Face dataset loading and tokenization
-- `quant_lora/lora.py`: minimal LoRA wrapper used by the synthetic stack
-- `quant_lora/hf_model.py`: pretrained model and PEFT LoRA setup
-- `quant_lora/quantization.py`: uniform quantizers and shared stats structs
-- `quant_lora/peft_regularization.py`: merged-weight quantization regularizer for PEFT layers
-- `quant_lora/trainer.py`: synthetic training loop
-- `quant_lora/hf_trainer.py`: Hugging Face training loop and evaluation
-- `configs/`: synthetic and real-model experiment configs
+- `Llama 3.2 1B` LoRA, ternary:
+  - baseline merged-then-quantized loss: `10.68995`
+  - best regularized run: `10.26500`
+  - improvement: `-0.42495`
 
-## Quantization Config Flags
+- `Qwen 0.6B` full-FT, `INT4`:
+  - baseline merged-then-quantized loss: `3.68961`
+  - best regularized run: `3.62244`
+  - improvement: `-0.06717`
 
-Quantization-aware LoRA regularization is controlled by:
+- `Qwen 0.6B` full-FT, `2-bit`:
+  - baseline merged-then-quantized loss: `18.42231`
+  - best regularized run: `17.74188`
+  - improvement: `-0.68044`
 
-- `enable_quant_lora_regularization`
-- `lambda_q`
-- `quantizer_type`
-- `bit_width`
-- `group_size`
-- `regularization_frequency`
-- `log_per_layer_stats`
+The completed `code_search_net` LoRA slice is useful mainly as a stability check:
 
-Supported `quantizer_type` values:
+- regularization usually preserves task quality
+- improvements exist for some model/target pairs
+- but most gains there are small
 
-- `uniform_per_tensor`
-- `uniform_per_channel`
-- `uniform_groupwise`
-- `fp8_e4m3fn`
-- `fp8_e5m2`
+## Core Method
 
-## Synthetic Sanity Run
+For a deployable weight matrix `W`, training uses:
 
-Install dependencies:
+`L = L_task + lambda_q * R(W, Q(W))`
 
-```bash
-pip install -r requirements.txt
-```
+where:
 
-Baseline sanity run:
+- `Q(W)` is the target quantizer
+- `R` is usually a weight-space MSE surrogate
+- evaluation is done on the merged-and-quantized model, not just the float model
 
-```bash
-python train.py --config configs/sanity_baseline.json
-```
+In the LoRA setting:
 
-Quantization-aware sanity run:
+- `W = W0 + BA`
+- regularization is applied in merged deployable weight space
 
-```bash
-python train.py --config configs/sanity_quant_lora.json
-```
+In the full-FT setting:
 
-## Real Model Runs
+- the same idea is applied directly to trainable full-model linear weights
 
-These runs were tested with the `torch-gpu` conda environment on a 6 GB RTX 4050 Laptop GPU.
+## Experiment Types In This Repo
 
-DistilBERT on AG News:
+### 1. LoRA experiments
 
-```bash
-C:\conda-envs\torch-gpu\python.exe train_hf.py --config configs/hf_distilbert_agnews_quant_lora.json
-```
+Main runner:
 
-GPT-2 on WikiText-2:
+- `C:\Work\Papers\Quantization-through-LoRA\run_h100_quant_lora_suite.py`
 
-```bash
-C:\conda-envs\torch-gpu\python.exe train_hf.py --config configs/hf_gpt2_wikitext_quant_lora.json
-```
+Completed LoRA targets include:
 
-The provided configs are intentionally small and research-friendly:
+- `no_quant_ft`
+- `quant_int4_ft`
+- `quant_fp8_ft`
+- `quant_int4_act_ft`
+- `quant_fp8_act_ft`
+- newer low-bit phases:
+  - `quant_int2_ft`
+  - `quant_ternary_ft`
 
-- DistilBERT: `distilbert-base-uncased`, LoRA on `q_lin` and `v_lin`
-- GPT-2: `gpt2`, LoRA on `c_attn` and `c_proj`
-- short training runs to verify the merged-weight regularizer on real pretrained models
+Main LoRA tasks used in this repo:
 
-## H100 Experiment Suite
+- `instruction_tuning`
+- `domain_adaptation_code`
 
-For larger-scale testing on a single H100, use the one-shot suite runner:
+### 2. Full-finetuning experiments
 
-```bash
-python run_h100_quant_lora_suite.py --output-root outputs/h100_suite
-```
+Main runner:
 
-The suite is set up for:
+- `C:\Work\Papers\Quantization-through-LoRA\run_full_ft_quant_sweep.py`
 
-- Gemma and Llama checkpoints:
-  - `google/gemma-3-1b-it`
-  - `meta-llama/Llama-3.2-1B-Instruct`
-  - `meta-llama/Llama-3.1-8B-Instruct`
-- 2 approximately 1B models:
-  - `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
-  - `Qwen/Qwen2.5-1.5B-Instruct`
-- 2 7B to 8B models:
-  - `mistralai/Mistral-7B-Instruct-v0.3`
-  - `Qwen/Qwen2.5-7B-Instruct`
-- 2 14B models:
-  - `Qwen/Qwen2.5-14B-Instruct`
-  - `Qwen/Qwen2.5-Coder-14B-Instruct`
+Completed full-FT sweeps use:
 
-And 3 real-world task families:
+- `INT8`
+- `INT4`
+- `2-bit`
+- ternary
 
-- `customer_support`: supervised response generation on Bitext customer support
-- `instruction_tuning`: supervised instruction tuning on Dolly 15k
-- `domain_adaptation_code`: code-domain adaptation on CodeSearchNet Python
+with multiple `lambda_q` values per target.
 
-For each model-task pair, the script prepares and optionally runs:
+### 3. Proxy quantized evaluation
 
-- `before_ft`: evaluation before any finetuning
-- `no_quant_ft`: LoRA finetuning without quantization regularization
-- `quant_int4_ft`: merged-weight regularized LoRA targeting INT4 deployability
-- `quant_fp8_ft`: merged-weight regularized LoRA targeting FP8 deployability
-- `quant_int4_act_ft`: activation-aware quantization regularization targeting INT4 deployability
-- `quant_fp8_act_ft`: activation-aware quantization regularization targeting FP8 deployability
+The key evaluation is:
 
-The H100 configs are optimized around:
+- take the trained model or merged LoRA adapter
+- quantize it with a proxy quantizer
+- evaluate downstream task loss / perplexity
 
-- `torch_dtype="bfloat16"`
-- `mixed_precision="bf16"`
-- `attn_implementation="sdpa"`
-- gradient checkpointing enabled
-- larger step counts than the local smoke tests
+Relevant script:
 
-Useful options:
+- `C:\Work\Papers\Quantization-through-LoRA\evaluate_quantized_proxy.py`
 
-```bash
-python run_h100_quant_lora_suite.py --write-only
-python run_h100_quant_lora_suite.py --models qwen25_14b qwen25_coder_14b --tasks instruction_tuning
-python run_h100_quant_lora_suite.py --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
-python run_h100_quant_lora_suite.py --export-fp8-offline
-```
+This is the metric that matters for the paper.
 
-Example focused run for larger public instruct models on a non-customer-support task:
+## Where The Results Are
 
-```bash
-python run_h100_quant_lora_suite.py \
-  --models gemma3_1b llama32_1b llama31_8b \
-  --tasks instruction_tuning \
-  --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft quant_int4_act_ft quant_fp8_act_ft
-```
+### Main local proxy-eval summaries
 
-CloudExe example using a single H100:
+- `C:\Work\Papers\Quantization-through-LoRA\outputs\a6000_proxy_eval\all_proxy_eval_summary.csv`
+- `C:\Work\Papers\Quantization-through-LoRA\outputs\a6000_proxy_eval\lora_proxy_backfill_summary.csv`
+- `C:\Work\Papers\Quantization-through-LoRA\outputs\a6000_proxy_eval\fullft_proxy_backfill_summary.csv`
 
-```bash
-cloudexe --gpuspec H100x1 -- \
-  /bin/bash /root/Quantization-through-LoRA/run_cloudexe_instruction_suite.sh
-```
+Important columns:
 
-To evaluate completed adapters under proxy INT4 / FP8 quantization:
+- `float_loss`: float-model task loss
+- `quant_loss`: post-quantization task loss
+- `eval_loss_delta`: `quant_loss - float_loss`
+- `active_primary_metric`: float-model task metric
+- `proxy_primary_metric`: post-quantization task metric
+- `primary_metric_delta`: degradation after quantization
 
-```bash
-cloudexe --gpuspec H100x1 -- \
-  /bin/bash /root/Quantization-through-LoRA/run_cloudexe_instruction_proxy_eval.sh
-```
+### Earlier low-bit LoRA result set
 
-If your repo lives somewhere else on the remote machine, override `REPO_DIR` inline:
+The strongest ultra-low-bit LoRA results used in the paper came from earlier completed sweeps under:
 
-```bash
-cloudexe --gpuspec H100x1 -- \
-  /bin/bash -lc 'REPO_DIR=/root/Protos-1B /bin/bash /root/Protos-1B/run_cloudexe_instruction_suite.sh'
-```
+- `C:\Work\Papers\Quantization-through-LoRA\outputs`
 
-If you prefer calling Python directly in the same style as your existing job:
+### Paper draft
+
+- `C:\Work\Papers\Quantization-through-LoRA\paper_acl_workshop\main.tex`
+
+## Quick Interpretation Guide
+
+When reading a CSV row:
+
+- lower `quant_loss` is better
+- lower `eval_loss_delta` is better
+- lower `primary_metric_delta` is better
+
+The main baseline for a target is usually:
+
+- `no_quant_ft` for LoRA
+- `no_quant` for full FT
+
+The right question is:
+
+“Does some regularized run achieve lower post-quantization task loss than ordinary finetuning followed by quantization?”
+
+## Project Structure
+
+Main training and evaluation files:
+
+- `C:\Work\Papers\Quantization-through-LoRA\train_hf.py`
+- `C:\Work\Papers\Quantization-through-LoRA\run_h100_quant_lora_suite.py`
+- `C:\Work\Papers\Quantization-through-LoRA\run_full_ft_quant_sweep.py`
+- `C:\Work\Papers\Quantization-through-LoRA\evaluate_quantized_proxy.py`
+
+Core library code:
+
+- `C:\Work\Papers\Quantization-through-LoRA\quant_lora\hf_model.py`
+- `C:\Work\Papers\Quantization-through-LoRA\quant_lora\hf_trainer.py`
+- `C:\Work\Papers\Quantization-through-LoRA\quant_lora\peft_regularization.py`
+- `C:\Work\Papers\Quantization-through-LoRA\quant_lora\quantization.py`
+- `C:\Work\Papers\Quantization-through-LoRA\quant_lora\hf_config.py`
+
+Paper and manuscript:
+
+- `C:\Work\Papers\Quantization-through-LoRA\paper_acl_workshop\main.tex`
+
+## Running Experiments
+
+### LoRA suite
 
 ```bash
-cloudexe --gpuspec H100x1 -- \
-  /opt/miniconda/envs/ndna/bin/python /root/Quantization-through-LoRA/run_h100_quant_lora_suite.py \
-    --output-root /root/Quantization-through-LoRA/outputs/cloud_instruction_suite \
-    --models gemma3_1b llama32_1b llama31_8b \
-    --tasks instruction_tuning \
-    --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
+python C:\Work\Papers\Quantization-through-LoRA\run_h100_quant_lora_suite.py --output-root C:\Work\Papers\Quantization-through-LoRA\outputs\h100_suite
 ```
 
-If the remote box has limited space under `/root/.cache`, point the Hugging Face cache at a larger mount:
+### Full-FT sweep
 
 ```bash
-cloudexe --gpuspec H100x1 -- \
-  /opt/miniconda/envs/ndna/bin/python /root/Quantization-through-LoRA/run_h100_quant_lora_suite.py \
-    --output-root /mnt/work/outputs/cloud_instruction_suite \
-    --cache-root /mnt/work/hf_cache \
-    --models gemma3_1b llama32_1b llama31_8b \
-    --tasks instruction_tuning \
-    --phases before_ft no_quant_ft quant_int4_ft quant_fp8_ft
+python C:\Work\Papers\Quantization-through-LoRA\run_full_ft_quant_sweep.py --output-root C:\Work\Papers\Quantization-through-LoRA\outputs\fullft
 ```
 
-Outputs:
-
-- run configs: `outputs/h100_suite/configs/`
-- run directories: `outputs/h100_suite/runs/`
-- summary CSV: `outputs/h100_suite/summary.csv`
-- summary Markdown: `outputs/h100_suite/summary.md`
-- generated serving commands: `outputs/h100_suite/serving_recipes.md`
-
-Optional extra packages for large-model training and serving:
+### Proxy evaluation
 
 ```bash
-pip install bitsandbytes vllm
-pip install auto-fp8  # optional, only for offline FP8 export
+python C:\Work\Papers\Quantization-through-LoRA\evaluate_quantized_proxy.py --help
 ```
 
-Note: `vllm`, `bitsandbytes`, and `auto-fp8` are most practical on Linux. The training suite itself remains standard `transformers` + `peft`.
+## Main Takeaways
 
-## Quantized Serving
+- The project is strongest as a **deployment-aware customization** study, not as a universal LoRA improvement claim.
+- The method is most useful when quantization damage is large enough to matter.
+- Ultra-low-bit results are the strongest evidence.
+- Mild-precision improvements are often too small to matter.
+- Supporting A6000 runs are useful for scope and stability, but the headline result is still the low-bit deployment story.
 
-After a run finishes, the adapter is saved under each run directory at `adapter/`.
+## Current Limitations
 
-You can launch a quantized serving stack directly with:
-
-```bash
-python serve_quantized_adapter.py ^
-  --base-model Qwen/Qwen2.5-7B-Instruct ^
-  --adapter-dir outputs/h100_suite/runs/qwen25_7b__instruction_tuning__quant_int4_ft/adapter ^
-  --quantization int4 ^
-  --served-model-name qwen25-7b-int4-lora
-```
-
-FP8 example:
-
-```bash
-python serve_quantized_adapter.py ^
-  --base-model Qwen/Qwen2.5-14B-Instruct ^
-  --adapter-dir outputs/h100_suite/runs/qwen25_14b__customer_support__quant_fp8_ft/adapter ^
-  --quantization fp8 ^
-  --served-model-name qwen25-14b-fp8-lora
-```
-
-The suite also writes ready-to-run `vllm` commands into `outputs/h100_suite/serving_recipes.md`, plus shell snippets for INT4 and FP8.
-
-## Expected Logging
-
-Both trainers log:
-
-- `task_loss`
-- `quant_reg_loss`
-- `avg_distance_to_grid`
-- validation metrics
-- optional per-layer quantization stats
-
-The Hugging Face trainer also logs approximate peak GPU memory.
-
-## Runs Completed On This Machine
-
-Using `C:\conda-envs\torch-gpu\python.exe` on the local GPU:
-
-- DistilBERT / AG News: `final eval_loss=1.156527`, `final eval_accuracy=0.460526`
-- GPT-2 / WikiText-2: `final eval_loss=4.397587`, `final eval_perplexity=81.254546`
-
-## Limitations
-
-- This is a research prototype, not a production training stack.
-- The fake quantizer is simple and symmetric; there is no calibration, clipping search, or learned quantizer.
-- The FP8 regularizer uses a fake projection through PyTorch FP8 dtypes; deploy-time FP8 kernels and scaling behavior may differ from training-time regularization.
-- The regularizer operates on the currently merged LoRA-touched weights only.
-- The Hugging Face path currently assumes PEFT LoRA layers with 2D base weights.
-- GPT-2 uses PEFT's `Conv1D` LoRA support, so groupwise dimensions follow the merged parameter layout used by PEFT.
-- The provided real-model configs are small smoke tests, not tuned baselines.
-- The H100 suite is configured for open-weight models and public datasets, but some models may require a Hugging Face login or updated license acceptance before download.
-- The large-model suite is designed for a single high-memory GPU, but exact feasible batch sizes still depend on sequence length, driver stack, and kernel availability.
-- Windows Hugging Face caching may warn about symlink support; this affects cache efficiency, not correctness.
-"# LoRA-QAT" 
+- Weight-space MSE is only a proxy for deployed model quality.
+- Some branches are incomplete or contain failed runs; the paper should use only completed post-quantization evaluations.
+- Gains are inconsistent across models and precisions.
+- `INT8` is often too easy for this method to show meaningful value.
+- Very low-bit runs can improve deployed quality while still hurting float-side quality, so target-dependent tradeoffs matter.
